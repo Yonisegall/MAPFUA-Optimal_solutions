@@ -314,10 +314,9 @@ public class Solution implements Iterable<SingleAgentPlan>{
     public int NUA(){
         int cost = 0;
         for (SingleAgentPlan plan : this) {
-            if (plan.agent.source.equals(plan.agent.target)) 
+            if (plan.agent.isUnassigned)
                 cost += plan.nua();
         }
-        // System.out.println("NUA: " + cost);
         return cost;
     }
 
@@ -339,7 +338,7 @@ public class Solution implements Iterable<SingleAgentPlan>{
         int cost = 0;
         for (SingleAgentPlan plan : this) {
             // if the agent starts at its target, it doesn't have assigned steps, so we don't count its fuel
-            if (!plan.agent.source.equals(plan.agent.target)) {
+            if (!plan.agent.isUnassigned) {
                 cost += plan.fuel();
             }
         }

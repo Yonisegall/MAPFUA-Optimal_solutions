@@ -2,8 +2,6 @@
 
 ## A research framework for Multi-Agent Path Finding with Assigned and Unassigned Agents
 
-[![CI-tests](https://github.com/J-morag/MAPF_dev/actions/workflows/CI-tests.yml/badge.svg)](https://github.com/J-morag/MAPF_dev/actions/workflows/CI-tests.yml)
- [Continuous Benchmark](https://j-morag.github.io/MAPF_dev/dev/bench/master/)
 
 ![til](./resources/images/MAPF_text_bold_splash_delay.gif)
 

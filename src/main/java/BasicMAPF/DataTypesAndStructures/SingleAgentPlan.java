@@ -472,19 +472,25 @@ public class SingleAgentPlan implements Iterable<Move> {
         return this.moves.spliterator();
     }
 
-    int makspan() {
-        return moves.size();
+    int makespan() {
+        return numOfSteps();
     }
+
+    // ------------------ Cost Functions for MAPFUA --------------------
 
     /**
      * @return the Service Time of a single agent
      */
-    public int serviceTime(){ return firstVisitToTargetTime() - getPlanStartTime();}
+    public int serviceTime(){
+        return firstVisitToTargetTime() - getPlanStartTime();
+    }
 
     /**
      * @return the fuel (only the times the agent did not stay in his place) of a single agent
      */
-    public int fuel(){ return moves.size() - numOfstay;}
+    public int fuel(){ 
+        return numOfSteps() - numOfstay;
+    }
 
     /**
      * @return the number of UA that moved of a single agent
@@ -496,31 +502,10 @@ public class SingleAgentPlan implements Iterable<Move> {
         }
         return 0;
     }
-
-    public int nua_2(){
-        boolean movedFirstTime = false;
-        int cost = 0;
-
-        for (Move m : moves){
-            //Assigned
-            if (firstVisitToTargetTime() >= m.timeNow)
-                cost++;
-            //Unassigned
-            else{
-                if (!m.prevLocation.equals(m.currLocation)){
-                    if (!movedFirstTime){
-                        cost += 1000; //penalty for the first move after target
-                        movedFirstTime = true;
-                    }
-                    else{
-                        cost++;
-                    }
-                }
-            }
-        }
-        return cost;
-    }
-
+    
+    /**
+     * @return the Service Time of a single agent, counting all the time steps until the last move that is not a stay move after reaching the target.
+     */
     public int sst_all(){
         int start = getPlanStartTime();
 
@@ -532,7 +517,9 @@ public class SingleAgentPlan implements Iterable<Move> {
         }
         return (lastMoveTime - start);
     }
-      
+
+    // -------------------------------------------------------------------------
+    
 
     public int numOfSteps(){
         return moves.size();

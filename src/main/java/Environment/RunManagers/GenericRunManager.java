@@ -54,17 +54,19 @@ public class GenericRunManager extends A_RunManager {
 //───────────────────────────────────────────── Dynamic UA ─────────────────────────────────────────────
 
         // CBS:
-        super.solvers.add(CanonicalSolversFactory.createCBS_UA_SST_Solver());           // SST
-        super.solvers.add(CanonicalSolversFactory.createCBS_UA_Fuel_Solver());          // Fuel
-        super.solvers.add(CanonicalSolversFactory.createMinNUACBSSolver());             // NUA (CBS with LaCAM)
-        super.solvers.add(CanonicalSolversFactory.createCBS_UA_SST_ALL_Solver());       // SST All
-        super.solvers.add(CanonicalSolversFactory.createCBS_UA_Fuel_Assigned_Solver()); // FUEL Assigned
+        // super.solvers.add(CanonicalSolversFactory.createCBS_UA_SST_Solver());           // SST
+        // super.solvers.add(CanonicalSolversFactory.createCBS_UA_Fuel_Solver());          // Fuel
+        super.solvers.add(CanonicalSolversFactory.createCBS_UA_NUA_Solver());           // NUA (Pure CBS)
+
+        // super.solvers.add(CanonicalSolversFactory.createMinNUACBSSolver());             // NUA (CBS with ID-LaCAM)
+        // super.solvers.add(CanonicalSolversFactory.createCBS_UA_SST_ALL_Solver());       // SST All
+        // super.solvers.add(CanonicalSolversFactory.createCBS_UA_Fuel_Assigned_Solver()); // FUEL Assigned
 
         // A*+OD:
-        super.solvers.add(CanonicalSolversFactory.createAStartOD_UA_SST_Solver());      // SST
-        super.solvers.add(CanonicalSolversFactory.createAStartOD_UA_Fuel_Solver());     // Fuel
-        super.solvers.add(CanonicalSolversFactory.createAStarOD_UA_NUA_Solver());       // NUA (AStar + OD)
-        super.solvers.add(CanonicalSolversFactory.createAStarODLaCAM_UA_NUA_Solver());  // NUA (LaCAM + AStar + OD)
+        // super.solvers.add(CanonicalSolversFactory.createAStartOD_UA_SST_Solver());      // SST
+        // super.solvers.add(CanonicalSolversFactory.createAStartOD_UA_Fuel_Solver());     // Fuel
+        // super.solvers.add(CanonicalSolversFactory.createAStarOD_UA_NUA_Solver());       // NUA (AStar + OD)
+        // super.solvers.add(CanonicalSolversFactory.createAStarODLaCAM_UA_NUA_Solver());  // NUA (LaCAM + AStar + OD)
 
         // LaCAM:
         // super.solvers.add(CanonicalSolversFactory.createLaCAMtSolver()); 
@@ -107,7 +109,7 @@ public class GenericRunManager extends A_RunManager {
     public static int countUnassignedAgents(MAPF_Instance instance) {
         int count = 0;
         for (Agent a : instance.agents) {
-            if (a.source.equals(a.target)) count++; 
+            if (a.isUnassigned) count++;
         }
         return count;
     }

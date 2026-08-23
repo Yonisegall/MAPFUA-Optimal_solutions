@@ -106,7 +106,7 @@ public class AStarOD_Solver extends A_Solver {
         if (this.staticObstaclesForUnassignedAgents && (this.staticUA == null || this.staticUA.isEmpty())) {
             java.util.HashSet<Integer> allUAIds = new java.util.HashSet<>();
             for (Agent a : this.agents) {
-                if (a.source.equals(a.target)) allUAIds.add(a.iD);
+                if (a.isUnassigned) allUAIds.add(a.iD);
             }
             if (!allUAIds.isEmpty()) {
                 setupStaticUAByIds(allUAIds);
@@ -136,10 +136,6 @@ public class AStarOD_Solver extends A_Solver {
             this.singleAgentGAndH = new FuelGAndH(this.singleAgentGAndH);
         } else if (this.costFunction instanceof SumNUA && !(this.singleAgentGAndH instanceof NUAGAndH)) {
             this.singleAgentGAndH = new NUAGAndH(this.singleAgentGAndH);
-        }
-
-        if (this.costFunction instanceof SumNUA) {
-            ((SumNUA) this.costFunction).configureFromInstance(instance);
         }
 
         // ═══════════════ Search structures ═══════════════
@@ -245,7 +241,7 @@ public class AStarOD_Solver extends A_Solver {
 
             // MAPFUA trick:
             // Unassigned agents have source == target, so they are considered to have already visited the target at t=0.
-            visitedTargets[i] = a.source.equals(a.target);
+            visitedTargets[i] = a.isUnassigned;
         }
 
         float h = heuristicForFull(startPositions, visitedTargets);

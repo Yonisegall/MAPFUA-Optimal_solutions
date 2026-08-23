@@ -140,7 +140,7 @@ public class MinNUACBS_Solver extends A_Solver {
 
             int makespan = 0;
             for (SingleAgentPlan p : finalSol) {                
-                if (!isUA(p.agent) && p.getEndTime() > makespan) makespan = p.getEndTime();            
+                if (!p.agent.isUnassigned && p.getEndTime() > makespan) makespan = p.getEndTime();
             }
   
             // Find the static agent according
@@ -160,7 +160,7 @@ public class MinNUACBS_Solver extends A_Solver {
             }
 
             for (Agent ua : instance.agents) {
-                if (!isUA(ua)) continue;                 // Only UA
+                if (!ua.isUnassigned) continue;          // Only UA
                 if (staticIDs.contains(ua.iD)) continue; // Only dynamic
 
                 SingleAgentPlan plan = finalSol.getPlanFor(ua);
@@ -221,7 +221,7 @@ public class MinNUACBS_Solver extends A_Solver {
     private Set<Agent> identifyMovedUA(Solution sol, MAPF_Instance instance) {
         Set<Agent> moved = new HashSet<>();
         for (SingleAgentPlan plan : sol) {
-            if (isUA(plan.agent)) {
+            if (plan.agent.isUnassigned) {
                 I_Location source = instance.map.getMapLocation(plan.agent.source);
                 System.out.println("[DEBUG identifyMovedUA] Agent " + plan.agent.iD + 
                     " source=" + plan.agent.source);
@@ -249,7 +249,7 @@ public class MinNUACBS_Solver extends A_Solver {
     private List<Agent> getUAAgents(MAPF_Instance instance) {
         List<Agent> ua = new ArrayList<>();
         for (Agent a : instance.agents) {
-            if (a.source.equals(a.target)) ua.add(a);
+            if (a.isUnassigned) ua.add(a);
         }
         return ua;
     }
@@ -280,10 +280,6 @@ public class MinNUACBS_Solver extends A_Solver {
             mapped.putPlan(new SingleAgentPlan(orig, newMoves));
         }
         return mapped;
-    }
-
-    private boolean isUA(Agent a) {
-        return a.source.equals(a.target);
     }
 
     private void absorbCBSMetrics(InstanceReport cbsReport) {

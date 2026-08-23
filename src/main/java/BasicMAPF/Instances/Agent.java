@@ -8,12 +8,13 @@ public class Agent {
     public final I_Coordinate source;
     public final I_Coordinate target;
     public final int priorityClass;
+    /**
+     * Whether this agent is unassigned (UA), meaning its original source and target are identical.
+     */
+    public final boolean isUnassigned;
 
     public Agent(int iD, I_Coordinate source, I_Coordinate target) {
-        this.iD = iD;
-        this.source = source;
-        this.target = target;
-        this.priorityClass = 1;
+        this(iD, source, target, 1);
     }
 
     public Agent(int iD, I_Coordinate source, I_Coordinate target, int priorityClass) {
@@ -21,6 +22,7 @@ public class Agent {
         this.source = source;
         this.target = target;
         this.priorityClass = priorityClass;
+        this.isUnassigned = source.equals(target);
     }
 
     @Override

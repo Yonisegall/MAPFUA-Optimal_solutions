@@ -136,7 +136,7 @@ public class MinNUAAStarOD_Solver extends A_Solver {
     private List<Agent> getUAAgents(MAPF_Instance instance) {
         List<Agent> ua = new ArrayList<>();
         for (Agent a : instance.agents) {
-            if (a.source.equals(a.target)) ua.add(a);
+            if (a.isUnassigned) ua.add(a);
         }
         return ua;
     }

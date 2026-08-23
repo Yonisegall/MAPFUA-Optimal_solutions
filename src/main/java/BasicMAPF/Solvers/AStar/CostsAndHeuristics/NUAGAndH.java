@@ -51,28 +51,31 @@ public class NUAGAndH implements SingleAgentGAndH {
      * NUA cost:
      * - Assigned: cost = 1
      * - Unassigned (after target):
-     *     - First move: cost = 100
+     *     - First move: cost = 1
      *     - Subsequent: cost = 0
      */
     @Override
     public int cost(Move move, boolean isAfterTargetExcludingFirstMoveToTarget) {
-        // Assigned: Move or wait = 1
-        if (!isAfterTargetExcludingFirstMoveToTarget) {return 1;}
-        
-        // Unassigned
-        // Wait = 1, to encourage waiting after target rather than moving
-        if (move.prevLocation.equals(move.currLocation)) {return 0;} // return 0;
-        
-        // Movement after target
-        // Check if prevLocation is the target (first move away from target)
+        if (!isAfterTargetExcludingFirstMoveToTarget) {
+            return 1;
+        }
+
         I_Coordinate target = move.agent.target;
 
-        // First move away from target = 1,000 to strongly discourage moving after reaching target (but still allow it if necessary to reach the goal in some cases)
-        if (move.prevLocation.getCoordinate().equals(target)) {return 1;}
-        
-        // Already moved at least once - move or wait = 0
-        return 0;
+        boolean isWait = move.prevLocation.equals(move.currLocation);
+        boolean prevIsTarget = move.prevLocation.getCoordinate().equals(target);
+
+        if (isWait && prevIsTarget) {
+            return 0;
+        }
+
+        if (!isWait && prevIsTarget) {
+            return 1;
+        }
+
+        return 1;
     }
+    
 
     @Override
     // Default: Assigned agent cost = 1
@@ -84,23 +87,50 @@ public class NUAGAndH implements SingleAgentGAndH {
     @Override
     public int cost(Move move, SingleAgentAStar_Solver.AStarState prevState) {
         boolean afterTarget = prevState != null && prevState.visitedTarget;
-        
-        // Assigned: cost = 1
-        if (!afterTarget) {return 1;}
-        
-        // Unassigned
-        // Wait = 1, to encourage waiting after target rather than moving
-        if (move.prevLocation.equals(move.currLocation)) {return 0;} // return 0;
-        
-        // Movement after target
-        // Check if prevLocation is the target (first move away from target)
+
+        /*
+        * Before the target is first visited:
+        * This is normal path finding for assigned agents.
+        * We use step cost 1 only as a low-level search mechanism.
+        */
+        if (!afterTarget) {
+            return 1;
+        }
+
+        /*
+        * After target was already visited.
+        * For UA, source == target, so this is true from t=0.
+        */
+
         I_Coordinate target = move.agent.target;
 
-        // First move away from target = 1,000 to strongly discourage moving after reaching target (but still allow it if necessary to reach the goal in some cases)
-        if (move.prevLocation.getCoordinate().equals(target)) {return 1;}
-        
-        // Already moved at least once - move or wait = 0
-        return 0;
+        boolean isWait = move.prevLocation.equals(move.currLocation);
+        boolean prevIsTarget = move.prevLocation.getCoordinate().equals(target);
+
+        /*
+        * UA waits at its original source/target:
+        * No UA movement happened yet.
+        */
+        if (isWait && prevIsTarget) {
+            return 0;
+        }
+
+        /*
+        * First move away from source/target:
+        * This activates this UA.
+        */
+        if (!isWait && prevIsTarget) {
+            return 1;
+        }
+
+        /*
+        * The UA has already moved before.
+        *
+        * This is NOT part of the high-level NUA objective.
+        * It is only a low-level technical tie-break so A* prefers shorter,
+        * finite paths instead of wandering/waiting forever with cost 0.
+        */
+        return 1;
     }
 
     public SingleAgentGAndH getWrappedHeuristic() {return this.gAndH;}

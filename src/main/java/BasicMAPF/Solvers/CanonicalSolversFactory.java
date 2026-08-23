@@ -13,6 +13,7 @@ import org.jetbrains.annotations.NotNull;
 import BasicMAPF.CostFunctions.ConflictsCount;
 import BasicMAPF.CostFunctions.FuelAssigned;
 import BasicMAPF.CostFunctions.SumFuel;
+import BasicMAPF.CostFunctions.SumNUA;
 import BasicMAPF.CostFunctions.SumServiceTimes;
 import BasicMAPF.CostFunctions.SumServiceTimesAll;
 import BasicMAPF.DataTypesAndStructures.MDDs.OnePathAStarMDDBuilderFactory;
@@ -89,7 +90,6 @@ public class CanonicalSolversFactory {
     public final static String MAASTAR_OD_NAME = "MAAStarOD";
     public final static String MAASTAR_OD_LEXICAL_NAME = "MAAStarOD_Lexical";
     public final static String MINNUA_CBS_NAME = "MinNUA_CBS";
-
     public final static String AStartOD_NAME = "AStarOD";
     public final static String MINNUA_OD_NAME = "MinNUA_AStarOD";
     public final static String MINNUA_OD_LACAM_NAME = "MinNUA_AStarOD_LaCAM";
@@ -667,6 +667,7 @@ public class CanonicalSolversFactory {
         s.setConfiguredCostFunctionName("SST");
         return s;
     }
+
     /**
      *
      * @return MAPF-UA problem with CBS, cost function Fuel
@@ -677,6 +678,20 @@ public class CanonicalSolversFactory {
                 .setTransientMAPFSettings(TransientMAPFSettings.defaultTransientMAPF)
                 .createCBS_Solver();
         s.setConfiguredCostFunctionName("FUEL");
+        return s;
+    }
+
+    /**
+     *
+     * @return MAPF-UA problem with CBS, cost function NUA-only. 
+     * Objective: minimize only the number of unassigned agents that moved.
+     */
+    public static CBS_Solver createCBS_UA_NUA_Solver() {
+        CBS_Solver s = new CBSBuilder()
+                .setCostFunction(new SumNUA())
+                .setTransientMAPFSettings(TransientMAPFSettings.defaultTransientMAPF)
+                .createCBS_Solver();
+        s.setConfiguredCostFunctionName("NUA");
         return s;
     }
 

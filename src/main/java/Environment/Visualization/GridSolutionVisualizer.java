@@ -47,7 +47,7 @@ public class GridSolutionVisualizer {
                 if (map.isObstacle(xy)) {
                     throw new IllegalArgumentException(String.format("Agent %s is on an obstacle", agent));
                 }
-                boolean atGoal = solution.getPlanFor(agent).getEndTime() <= time && !agent.source.equals(agent.target); // Don't count if start == goal
+                boolean atGoal = solution.getPlanFor(agent).getEndTime() <= time && !agent.isUnassigned;
                 // boolean atGoal = solution.getPlanFor(agent).getEndTime() <= time;
                 if (atGoal) {
                     // Get the agent's original color

@@ -129,7 +129,7 @@ public class LaCAM_Solver extends A_Solver {
             this.blockedLocations = new HashSet<>();
             List<Agent> newAgentsList = new ArrayList<>();
             for (Agent agent : instance.agents) {
-                if (agent.target.equals(agent.source)) {
+                if (agent.isUnassigned) {
                     boolean shouldBeStatic = (this.staticUA == null || this.staticUA.contains(agent));
                     if (shouldBeStatic) {
                         this.blockedLocations.add(instance.map.getMapLocation(agent.source));
@@ -697,7 +697,7 @@ public class LaCAM_Solver extends A_Solver {
             candidates.add(currentLocation);
         }
         
-        if (isUA(currentAgent) && !this.transitionMovedUA.contains(currentAgent)) {
+        if (currentAgent.isUnassigned && !this.transitionMovedUA.contains(currentAgent)) {
             if (this.transitionMovedUA.size() >= this.nuaBudget) {
                 candidates.clear();
                 candidates.add(currentLocation);
@@ -768,7 +768,7 @@ public class LaCAM_Solver extends A_Solver {
 
             // ✅ Enforce NUA budget for PIBT-chosen move (currentAgent -> nextLocation)
             boolean addedNow = false;
-            if (isUA(currentAgent)) {
+            if (currentAgent.isUnassigned) {
                 boolean wasCounted = this.transitionMovedUA.contains(currentAgent);
 
                 if (!enforceNUABudgetForPlannedMove(currentAgent, nextLocation)) {
@@ -866,17 +866,13 @@ public class LaCAM_Solver extends A_Solver {
         this.separatingVerticesSet = null;
     }
 
-    private boolean isUA(Agent a) {
-        return a.source.equals(a.target);
-    }
-
     private I_Location getSource(Agent a) {
         return this.instance.map.getMapLocation(a.source);
     }
     
     // Enforce NUA budget also for moves that come from the low-level tree (C.who -> C.where)
     private boolean enforceNUABudgetForPlannedMove(Agent agent, I_Location nextLocation) {
-        if (!isUA(agent)) {
+        if (!agent.isUnassigned) {
             return true;
         }
 

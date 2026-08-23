@@ -1,9 +1,14 @@
 package BasicMAPF.Solvers.CBS;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Queue;
 import java.util.Set;
 
 import org.jetbrains.annotations.Nullable;
@@ -23,6 +28,7 @@ import BasicMAPF.DataTypesAndStructures.Solution;
 import BasicMAPF.Instances.Agent;
 import BasicMAPF.Instances.MAPF_Instance;
 import BasicMAPF.Instances.Maps.Coordinates.I_Coordinate;
+import BasicMAPF.Instances.Maps.I_Location;
 import BasicMAPF.Solvers.AStar.CostsAndHeuristics.CachingDistanceTableHeuristic;
 import BasicMAPF.Solvers.AStar.CostsAndHeuristics.DistanceTableSingleAgentHeuristic;
 import BasicMAPF.Solvers.AStar.CostsAndHeuristics.FuelGAndH;
@@ -118,6 +124,8 @@ public class CBS_Solver extends A_Solver {
     private List<Agent> unassignedAgents = null;
     private Set<Agent> staticUA = null;
     private Solution initialSolution = null;
+    private Set<String> seenConstraintSignatures = new HashSet<>();
+    private Set<Integer> forcedMovedUAIds = new HashSet<>();
 
     /*  = Constructors =  */
 
@@ -182,7 +190,7 @@ public class CBS_Solver extends A_Solver {
             this.unassignedAgents = new ArrayList<>();
             List<Agent> newAgentsList = new ArrayList<>();
             for (Agent agent : instance.agents) {
-                if (agent.target.equals(agent.source)) {
+                if (agent.isUnassigned) {
                     Constraint infiniteConstraint = new GoalConstraint(null, 1, null, instance.map.getMapLocation(agent.source), agent);
                     this.initialConstraints.add(infiniteConstraint);
                     this.unassignedAgents.add(agent);
@@ -209,16 +217,31 @@ public class CBS_Solver extends A_Solver {
                 }
             }
             instance = new MAPF_Instance(instance.name, instance.map, newAgentsList.toArray(new Agent[0]));
+
+            // DEBUG: only after unassignedAgents and newAgentsList were built
+            System.out.println("[CBS DEBUG] staticUA filtering applied");
+
+            System.out.println("[CBS DEBUG] static UA:");
+            for (Agent a : this.unassignedAgents) {
+                System.out.println("  STATIC id=" + a.iD
+                        + (a.isUnassigned ? " [UA]" : " [AA]")
+                        + " " + a.source + "->" + a.target);
+            }
+
+            System.out.println("[CBS DEBUG] dynamic agents kept in CBS:");
+            for (Agent a : instance.agents) {
+                System.out.println("  DYNAMIC id=" + a.iD
+                        + (a.isUnassigned ? " [UA]" : " [AA]")
+                        + " " + a.source + "->" + a.target);
+            }
         }
 
         this.currentConstraints = new ConstraintSet();
         this.generatedNodes = 0;
         this.expandedNodes = 0;
         this.instance = instance;
-
-        if (this.costFunction instanceof BasicMAPF.CostFunctions.SumNUA) {
-            ((BasicMAPF.CostFunctions.SumNUA)this.costFunction).configureFromInstance(instance);
-        }
+        this.seenConstraintSignatures.clear();
+        this.forcedMovedUAIds.clear();
 
         // heuristic
         if (runParameters.singleAgentGAndH != null){
@@ -306,7 +329,7 @@ public class CBS_Solver extends A_Solver {
             }
         }
 
-        return new CBS_Node(solution, costFunction.solutionCost(solution));
+        return new CBS_Node(solution, computeNodeCost(solution));
     }
 
     /**
@@ -317,22 +340,67 @@ public class CBS_Solver extends A_Solver {
         while(!openList.isEmpty() && !checkTimeout()){
             CBS_Node node = openList.poll();
 
+            if (this.costFunction instanceof SumNUA) {
+                float updatedCost = computeNodeCost(node.getSolution());
+
+                if (updatedCost > node.solutionCost) {
+                    node.solutionCost = updatedCost;
+                    openList.add(node);
+                    continue;
+                }
+            }
+
+            // Debugging printing for NUA-CBS
+            if (this.costFunction instanceof SumNUA) {
+                System.out.println("\n[NUA-CBS] Poll node"
+                        + " id=" + node.serialID
+                        + " cost=" + node.getSolutionCost()
+                        + " NUA=" + node.getSolution().NUA()
+                        + " endTime=" + node.getSolution().endTime()
+                        + " openSize=" + openList.size());
+            }
+
             // verify solution (find conflicts)
             I_ConflictManager cat = getConflictManagerFor(node);
             node.setSelectedConflict(cat.selectConflict());
 
-            if(isGoal(node)){ // todo early goal test
+            // If there are no conflicts, this is a valid solution.
+            // Do NOT apply TRDP before accepting a conflict-free solution.
+            if (isGoal(node)) {
+                if (this.costFunction instanceof SumNUA) {
+                    System.out.println("[NUA-CBS] Goal candidate: no conflicts");
+                }
                 return node;
             }
-            else {
-                if (this.transientMAPFSettings.resolveAfterGoalConflictsLocally()) {
-                    if (tryResolveConflictsLocally(node)) {
-                        openList.add(node);
-                        continue;
-                    };
-                }
-                expandNode(node);
+
+            // NUA-CBS + TRDP:
+            // If the current solution is not a goal and contains a repeated global
+            // configuration, branch on the TRD conflict instead of a normal pairwise conflict.
+            if (this.costFunction instanceof SumNUA) {
+                TRDConflict trdConflict = findTRDConflict(node.getSolution());
+
+            if (trdConflict != null && node.getSolution().NUA() == 0) {
+                System.out.println("[NUA-CBS-TRDP] Pruning NUA=0 node with repeated global configuration"
+                        + " from t=" + trdConflict.loopStart
+                        + " to t=" + trdConflict.loopEnd
+                        + " | length=" + trdConflict.loopLength);
+
+                continue;
             }
+            }
+
+            if (this.costFunction instanceof SumNUA) {
+                System.out.println("[NUA-CBS] Selected conflict: " + node.selectedConflict);
+            }
+
+            if (this.transientMAPFSettings.resolveAfterGoalConflictsLocally()) {
+                if (tryResolveConflictsLocally(node)) {
+                    openList.add(node);
+                    continue;
+                }
+            }
+
+            expandNode(node);
         }
 
         return null; //probably a timeout
@@ -370,11 +438,21 @@ public class CBS_Solver extends A_Solver {
      */
 
     private void expandNode(CBS_Node node) {
+
+        // Debugging printing for NUA-CBS
+        if (this.costFunction instanceof SumNUA) {
+            System.out.println("[NUA-CBS] Expanding node"
+                    + " id=" + node.serialID
+                    + " cost=" + node.getSolutionCost()
+                    + " conflict=" + node.selectedConflict);
+        }
+
         this.expandedNodes++;
 
         // Special handling for FUEL: if there is a timestep where all agents stay,
         // branch into one child per agent, forbidding that agent to stay at that timestep.
-        if (this.costFunction instanceof SumFuel || this.costFunction instanceof SumNUA) {
+        if (this.costFunction instanceof SumFuel) {
+        // if (this.costFunction instanceof SumFuel || this.costFunction instanceof SumNUA) {
             Solution sol = node.getSolution();
             int last = sol.endTime();
             for (int t = 1; t <= last; t++) {
@@ -409,13 +487,588 @@ public class CBS_Solver extends A_Solver {
 
         // default (pairwise conflict) expansion
         Constraint[] constraints = node.selectedConflict.getPreventingConstraints();
+
+        // Debugging printing for NUA-CBS
+        if (this.costFunction instanceof SumNUA) {
+            System.out.println("[NUA-CBS] Generating CBS children");
+
+            Agent a1 = constraints[0].agent;
+            Agent a2 = constraints[1].agent;
+
+            System.out.println("[NUA-CBS] Conflict agents:"
+                    + " c0.agent=" + a1.iD + (a1.isUnassigned ? " [UA]" : " [AA]")
+                    + ", c1.agent=" + a2.iD + (a2.isUnassigned ? " [UA]" : " [AA]"));
+
+            SingleAgentPlan p1 = node.getSolution().getPlanFor(a1);
+            SingleAgentPlan p2 = node.getSolution().getPlanFor(a2);
+
+            System.out.println("[NUA-CBS] p1.nua=" + (a1.isUnassigned ? p1.nua() : -1));
+            System.out.println("[NUA-CBS] p2.nua=" + (a2.isUnassigned ? p2.nua() : -1));
+
+            System.out.println("[NUA-CBS] Left constraint:  " + constraints[0]);
+            System.out.println("[NUA-CBS] Right constraint: " + constraints[1]);
+
+            if (tryExpandNUAConflictWithStaticUABranch(node, constraints)) {
+                return;
+            }
+
+            if (tryExpandNUAConflictWithActiveUAAtAASourceOrTarget(node, constraints)) {
+                return;
+            }
+        }
+
         node.leftChild = generateNode(node, constraints[0], true);
         node.rightChild = generateNode(node, constraints[1], false);
 
         addToOpen(node.leftChild);
         addToOpen(node.rightChild);
     }
-    
+
+    /**
+     * Special branching for NUA-only CBS.
+     *
+     * Handles conflicts between:
+     *   - any moving / active agent
+     *   - a stationary UA that has not moved yet
+     *
+     * The active agent can be:
+     *   - an assigned agent
+     *   - or a UA that already moved
+     *
+     * Standard CBS creates a one-time constraint:
+     *   activeAgent cannot be at stationaryUA.source at time t
+     *
+     * In NUA, this is too weak.
+     * If the stationary UA does not move, its source is blocked forever.
+     *
+     * Therefore we create:
+     *
+     *   Child 1:
+     *      active agent avoids the stationary UA location forever.
+     *
+     *   Child 2:
+     *      stationary UA receives the regular conflict constraint and may move.
+     *
+     * @return true if the special NUA branching was applied.
+     */
+    private boolean tryExpandNUAConflictWithStaticUABranch(CBS_Node node, Constraint[] constraints) {
+        if (!(this.costFunction instanceof SumNUA)) {
+            return false;
+        }
+
+        if (constraints == null || constraints.length < 2) {
+            return false;
+        }
+
+        Constraint c0 = constraints[0];
+        Constraint c1 = constraints[1];
+
+        Agent agent0 = c0.agent;
+        Agent agent1 = c1.agent;
+
+        if (agent0 == null || agent1 == null) {
+            return false;
+        }
+
+        SingleAgentPlan plan0 = node.getSolution().getPlanFor(agent0);
+        SingleAgentPlan plan1 = node.getSolution().getPlanFor(agent1);
+
+        if (plan0 == null || plan1 == null) {
+            return false;
+        }
+
+        boolean agent0IsStationaryUA = agent0.isUnassigned && plan0.nua() == 0;
+        boolean agent1IsStationaryUA = agent1.isUnassigned && plan1.nua() == 0;
+
+        /*
+        * We need exactly one stationary UA.
+        *
+        * If none are stationary UA -> regular CBS.
+        * If both are stationary UA -> usually invalid/rare, and regular CBS is safer.
+        */
+        if (agent0IsStationaryUA == agent1IsStationaryUA) {
+            return false;
+        }
+
+        Agent stationaryUA;
+        Agent activeAgent;
+        Constraint stationaryUARegularConstraint;
+
+        if (agent0IsStationaryUA) {
+            stationaryUA = agent0;
+            activeAgent = agent1;
+            stationaryUARegularConstraint = c0;
+        } else {
+            stationaryUA = agent1;
+            activeAgent = agent0;
+            stationaryUARegularConstraint = c1;
+        }
+
+        I_Location stationaryLocation = this.instance.map.getMapLocation(stationaryUA.source);
+
+        if (!activeAgent.isUnassigned
+            && !canAgentReachTargetWithoutLocation(activeAgent, stationaryLocation)) {
+            if (forcedMovedUAIds.add(stationaryUA.iD)) {
+                System.out.println("[NUA-CBS] Forced UA detected: UA "
+                        + stationaryUA.iD
+                        + " must move because AA "
+                        + activeAgent.iD
+                        + " cannot reach its target while "
+                        + stationaryLocation
+                        + " is blocked");
+            }
+        }
+
+        System.out.println("[NUA-CBS] Applying special active-agent vs stationary-UA branch");
+        System.out.println("[NUA-CBS] Child 1: active agent " + activeAgent.iD
+                + (activeAgent.isUnassigned ? " [UA]" : " [AA]")
+                + " avoids stationary UA " + stationaryUA.iD
+                + " at " + stationaryLocation + " forever");
+        System.out.println("[NUA-CBS] Child 2: stationary UA " + stationaryUA.iD
+                + " replans with regular constraint " + stationaryUARegularConstraint);
+
+        /*
+        * Child 1:
+        * Keep the stationary UA static.
+        * Therefore the active agent must avoid the stationary UA source forever.
+        */
+        Constraint activeAvoidsStationaryUAForever = new GoalConstraint(
+                activeAgent,
+                1,
+                null,
+                stationaryLocation,
+                stationaryUA
+        );
+
+        CBS_Node activeAvoidChild = generateNode(node, activeAvoidsStationaryUAForever, true);
+
+        /*
+        * Child 2:
+        * Force the stationary UA to resolve the conflict.
+        * This may increase NUA by 1.
+        */
+        CBS_Node stationaryUAMovesChild = generateNode(node, stationaryUARegularConstraint, true);
+
+        node.leftChild = activeAvoidChild;
+        node.rightChild = stationaryUAMovesChild;
+
+        addToOpen(node.leftChild);
+        addToOpen(node.rightChild);
+
+        return true;
+    }
+
+    private boolean tryExpandNUAConflictWithActiveUAAtAASourceOrTarget(CBS_Node node, Constraint[] constraints) {
+        if (!(this.costFunction instanceof SumNUA)) {
+            return false;
+        }
+
+        if (constraints == null || constraints.length < 2) {
+            return false;
+        }
+
+        Constraint c0 = constraints[0];
+        Constraint c1 = constraints[1];
+
+        Agent a0 = c0.agent;
+        Agent a1 = c1.agent;
+
+        if (a0 == null || a1 == null) {
+            return false;
+        }
+
+        if (a0.isUnassigned == a1.isUnassigned) {
+            return false;
+        }
+
+        Agent aaAgent = a0.isUnassigned ? a1 : a0;
+        Agent uaAgent = a0.isUnassigned ? a0 : a1;
+
+        SingleAgentPlan uaPlan = node.getSolution().getPlanFor(uaAgent);
+        if (uaPlan == null || uaPlan.nua() == 0) {
+            return false;
+        }
+
+        I_Location aaSource = this.instance.map.getMapLocation(aaAgent.source);
+        I_Location aaTarget = this.instance.map.getMapLocation(aaAgent.target);
+
+        I_Location conflictLocation = c0.location;
+
+        if (conflictLocation == null) {
+            return false;
+        }
+
+        boolean conflictAtAASourceOrTarget =
+                conflictLocation.equals(aaSource) || conflictLocation.equals(aaTarget);
+
+        if (!conflictAtAASourceOrTarget) {
+            return false;
+        }
+
+        System.out.println("[NUA-CBS] Active UA blocks AA source/target");
+        System.out.println("[NUA-CBS] Forcing UA " + uaAgent.iD
+                + " to avoid " + conflictLocation + " forever");
+
+        Constraint uaAvoidsAASourceOrTargetForever = new GoalConstraint(
+                uaAgent,
+                1,
+                null,
+                conflictLocation,
+                aaAgent
+        );
+
+        CBS_Node child = generateNode(node, uaAvoidsAASourceOrTargetForever, true);
+
+        node.leftChild = child;
+        node.rightChild = null;
+
+        addToOpen(node.leftChild);
+
+        return true;
+    }
+
+    private boolean tryExpandAADeadlockByActivatingUA(CBS_Node node, Constraint[] constraints) {
+        if (!(this.costFunction instanceof SumNUA)) {
+            return false;
+        }
+
+        if (constraints == null || constraints.length < 2) {
+            return false;
+        }
+
+        Agent a0 = constraints[0].agent;
+        Agent a1 = constraints[1].agent;
+
+        if (a0 == null || a1 == null) {
+            return false;
+        }
+
+        // This reasoning is only for AA-AA conflicts.
+        if (a0.isUnassigned || a1.isUnassigned) {
+            return false;
+        }
+
+        /*
+        * Important:
+        * Only UAs that have NOT moved yet are still blocking their source as static buffers.
+        * If a UA already moved, do not keep treating its source as blocked here.
+        */
+        Set<Agent> blockingUAs = getStationaryUAs(node);
+
+        if (blockingUAs.isEmpty()) {
+            return false;
+        }
+
+        Set<I_Location> blockedByUASources = getSourceLocations(blockingUAs);
+
+        /*
+        * Can these two AAs solve their pairwise problem while the currently-stationary
+        * UA source cells are blocked?
+        */
+        boolean feasibleWithCurrentBlockedUASources =
+                twoAgentsFeasibleWithBlockedLocations(a0, a1, blockedByUASources);
+
+        if (feasibleWithCurrentBlockedUASources) {
+            return false;
+        }
+
+        System.out.println("[NUA-CBS] AA-AA deadlock detected between AA "
+                + a0.iD + " and AA " + a1.iD
+                + " while currently-stationary UA source cells are blocked");
+
+        List<Agent> activationCandidates = new ArrayList<>();
+
+        /*
+        * Try to find which stationary UA source opens the deadlock.
+        */
+        for (Agent ua : blockingUAs) {
+            I_Location uaSource = this.instance.map.getMapLocation(ua.source);
+
+            if (uaSource == null) {
+                continue;
+            }
+
+            Set<I_Location> blockedWithoutThisUA = new HashSet<>(blockedByUASources);
+            blockedWithoutThisUA.remove(uaSource);
+
+            boolean feasibleIfThisSourceIsFree =
+                    twoAgentsFeasibleWithBlockedLocations(a0, a1, blockedWithoutThisUA);
+
+            if (feasibleIfThisSourceIsFree) {
+                activationCandidates.add(ua);
+            }
+        }
+
+        if (activationCandidates.isEmpty()) {
+            return false;
+        }
+
+        if (activationCandidates.size() == 1) {
+            Agent forcedUA = activationCandidates.get(0);
+            forcedMovedUAIds.add(forcedUA.iD);
+
+            System.out.println("[NUA-CBS] Forced UA detected from AA-AA deadlock: UA "
+                    + forcedUA.iD + " must move / free its source");
+        }
+
+        boolean generatedAnyChild = false;
+
+        for (Agent ua : activationCandidates) {
+            I_Location uaSource = this.instance.map.getMapLocation(ua.source);
+
+            if (uaSource == null) {
+                continue;
+            }
+
+            System.out.println("[NUA-CBS] Activating UA " + ua.iD
+                    + " and forcing it to avoid its source forever: "
+                    + uaSource);
+
+            Constraint keepUASourceFreeForever = new GoalConstraint(
+                    ua,
+                    1,
+                    null,
+                    uaSource,
+                    a0
+            );
+
+            CBS_Node child = generateNode(node, keepUASourceFreeForever, true);
+
+            if (addToOpen(child)) {
+                generatedAnyChild = true;
+            }
+        }
+
+        return generatedAnyChild;
+    }
+
+    private Set<Agent> getStationaryUAs(CBS_Node node) {
+        Set<Agent> stationary = new HashSet<>();
+
+        for (SingleAgentPlan plan : node.getSolution()) {
+            Agent agent = plan.agent;
+
+            if (agent.isUnassigned && plan.nua() == 0) {
+                stationary.add(agent);
+            }
+        }
+
+        return stationary;
+    }
+
+    private Set<Agent> getAllUAsInCurrentInstance() {
+        Set<Agent> result = new HashSet<>();
+
+        for (Agent agent : this.instance.agents) {
+            if (agent.isUnassigned) {
+                result.add(agent);
+            }
+        }
+
+        return result;
+    }
+
+    private Set<I_Location> getSourceLocations(Set<Agent> agents) {
+        Set<I_Location> locations = new HashSet<>();
+
+        for (Agent agent : agents) {
+            I_Location location = this.instance.map.getMapLocation(agent.source);
+
+            if (location != null) {
+                locations.add(location);
+            }
+        }
+
+        return locations;
+    }
+
+    private boolean twoAgentsFeasibleWithBlockedLocations(
+            Agent agentA,
+            Agent agentB,
+            Set<I_Location> blockedLocations
+    ) {
+        I_Location startA = this.instance.map.getMapLocation(agentA.source);
+        I_Location targetA = this.instance.map.getMapLocation(agentA.target);
+
+        I_Location startB = this.instance.map.getMapLocation(agentB.source);
+        I_Location targetB = this.instance.map.getMapLocation(agentB.target);
+
+        if (startA == null || targetA == null || startB == null || targetB == null) {
+            return false;
+        }
+
+        if (blockedLocations.contains(startA)
+                || blockedLocations.contains(targetA)
+                || blockedLocations.contains(startB)
+                || blockedLocations.contains(targetB)) {
+            return false;
+        }
+
+        LocationPair start = new LocationPair(startA, startB);
+
+        Queue<LocationPair> queue = new ArrayDeque<>();
+        Set<LocationPair> visited = new HashSet<>();
+
+        queue.add(start);
+        visited.add(start);
+
+        while (!queue.isEmpty()) {
+            LocationPair curr = queue.poll();
+
+            if (curr.locationA.equals(targetA) && curr.locationB.equals(targetB)) {
+                return true;
+            }
+
+            List<I_Location> nextLocationsA = getLegalNextLocations(curr.locationA, blockedLocations);
+            List<I_Location> nextLocationsB = getLegalNextLocations(curr.locationB, blockedLocations);
+
+            for (I_Location nextA : nextLocationsA) {
+                for (I_Location nextB : nextLocationsB) {
+
+                    // Vertex conflict.
+                    if (nextA.equals(nextB)) {
+                        continue;
+                    }
+
+                    // Swapping conflict.
+                    if (nextA.equals(curr.locationB) && nextB.equals(curr.locationA)) {
+                        continue;
+                    }
+
+                    LocationPair nextPair = new LocationPair(nextA, nextB);
+
+                    if (visited.add(nextPair)) {
+                        queue.add(nextPair);
+                    }
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private List<I_Location> getLegalNextLocations(I_Location current, Set<I_Location> blockedLocations){
+        List<I_Location> result = new ArrayList<>();
+
+        // Wait action.
+        if (!blockedLocations.contains(current)) {
+            result.add(current);
+        }
+
+        for (I_Location next : current.outgoingEdges()) {
+            if (!blockedLocations.contains(next)) {
+                result.add(next);
+            }
+        }
+
+        return result;
+    }
+
+    private TRDConflict findTRDConflict(Solution solution) {
+        if (solution == null) {
+            return null;
+        }
+
+        Map<String, Integer> firstSeenTimeByConfiguration = new HashMap<>();
+
+        int endTime = solution.endTime();
+
+        for (int t = 0; t <= endTime; t++) {
+            String key = globalConfigurationKey(solution, t);
+
+            if (key == null) {
+                continue;
+            }
+
+            Integer firstTime = firstSeenTimeByConfiguration.get(key);
+
+            if (firstTime != null) {
+                if (t > firstTime) {
+                    return new TRDConflict(firstTime, t);
+                }
+            } else {
+                firstSeenTimeByConfiguration.put(key, t);
+            }
+        }
+
+        return null;
+    }
+
+    private String globalConfigurationKey(Solution solution, int time) {
+        List<String> parts = new ArrayList<>();
+
+        for (SingleAgentPlan plan : solution) {
+            Agent agent = plan.agent;
+
+            I_Location location = solution.getAgentLocation(agent, time);
+
+            if (location == null || location.getCoordinate() == null) {
+                return null;
+            }
+
+            parts.add(agent.iD + "@" + location.getCoordinate().toString());
+        }
+
+        parts.sort(String::compareTo);
+
+        return String.join("|", parts);
+    }
+
+    private void expandTRDNode(CBS_Node node, TRDConflict trdConflict) {
+        this.expandedNodes++;
+
+        List<CBS_Node> children = new ArrayList<>();
+
+        Solution solution = node.getSolution();
+
+        for (SingleAgentPlan plan : solution) {
+            Agent agent = plan.agent;
+
+            I_Location repeatedLocation = solution.getAgentLocation(agent, trdConflict.loopEnd);
+
+            if (repeatedLocation == null) {
+                continue;
+            }
+
+            /*
+            * Practical TRDP branch:
+            * The global configuration at loopEnd duplicates the one at loopStart.
+            * Therefore, at least one agent must not repeat its loop-end position.
+            *
+            * This is the classic CBS idea generalized:
+            * instead of branching on two agents in a conflict, we branch on all agents
+            * involved in the repeated global configuration.
+            */
+            Constraint breakLoopConstraint = new Constraint(
+                    agent,
+                    trdConflict.loopEnd,
+                    null,
+                    repeatedLocation
+            );
+
+            System.out.println("[NUA-CBS-TRDP] Child: agent "
+                    + agent.iD
+                    + (agent.isUnassigned ? " [UA]" : " [AA]")
+                    + " cannot be at "
+                    + repeatedLocation
+                    + " at t=" + trdConflict.loopEnd);
+
+            CBS_Node child = generateNode(node, breakLoopConstraint, true);
+
+            if (addToOpen(child)) {
+                children.add(child);
+            }
+        }
+
+        if (!children.isEmpty()) {
+            node.leftChild = children.get(0);
+        }
+
+        if (children.size() > 1) {
+            node.rightChild = children.get(1);
+        }
+    }
+
     /**
      * Adds a node to {@link #openList OPEN}. If a duplicate node exists, keeps the one with less cost.
      * @param node a node to insert into {@link #openList OPEN}
@@ -423,11 +1076,109 @@ public class CBS_Solver extends A_Solver {
      */
     private boolean addToOpen(CBS_Node node) {
         if(node == null){
-            // either the low level encountered a timeout (in which case we will also timeout very soon), or the low
-            // level was unsolvable (in which case we prune this node and continue).
+            // either the low level encountered a timeout, or the low level was unsolvable.
             return false;
         }
+
+        if (this.costFunction instanceof SumNUA) {
+            String signature = constraintPathSignature(node);
+
+            if (seenConstraintSignatures.contains(signature)) {
+                System.out.println("[NUA-CBS] Duplicate node pruned");
+                return false;
+            }
+
+            seenConstraintSignatures.add(signature);
+        }
+
         return openList.add(node);
+    }
+
+    private float computeNodeCost(Solution solution) {
+        if (!(this.costFunction instanceof SumNUA)) {
+            return this.costFunction.solutionCost(solution);
+        }
+
+        int cost = solution.NUA();
+
+        for (Integer forcedUAId : forcedMovedUAIds) {
+            if (!isUAIdMovedInSolution(solution, forcedUAId)) {
+                cost++;
+            }
+        }
+
+        return cost;
+    }
+
+    private boolean isUAIdMovedInSolution(Solution solution, int uaId) {
+        for (SingleAgentPlan plan : solution) {
+            if (plan.agent.iD == uaId) {
+                return plan.agent.isUnassigned && plan.nua() != 0;
+            }
+        }
+
+        return false;
+    }
+
+    private boolean canAgentReachTargetWithoutLocation(Agent agent, I_Location blockedLocation) {
+        I_Location source = this.instance.map.getMapLocation(agent.source);
+        I_Location target = this.instance.map.getMapLocation(agent.target);
+
+        if (source == null || target == null || blockedLocation == null) {
+            return false;
+        }
+
+        if (source.equals(blockedLocation) || target.equals(blockedLocation)) {
+            return false;
+        }
+
+        Queue<I_Location> queue = new ArrayDeque<>();
+        Set<I_Location> visited = new HashSet<>();
+
+        queue.add(source);
+        visited.add(source);
+
+        while (!queue.isEmpty()) {
+            I_Location curr = queue.poll();
+
+            if (curr.equals(target)) {
+                return true;
+            }
+
+            for (I_Location next : curr.outgoingEdges()) {
+                if (next.equals(blockedLocation)) {
+                    continue;
+                }
+
+                if (visited.add(next)) {
+                    queue.add(next);
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private String constraintPathSignature(CBS_Node node) {
+        List<String> parts = new ArrayList<>();
+
+        CBS_Node curr = node;
+        while (curr != null && curr.addedConstraint != null) {
+            parts.add(constraintSignature(curr.addedConstraint));
+            curr = curr.parent;
+        }
+
+        parts.sort(String::compareTo);
+        return String.join(";", parts);
+    }
+
+    private String constraintSignature(Constraint c) {
+        String agentId = c.agent == null ? "ALL" : String.valueOf(c.agent.iD);
+        String prev = c.prevLocation == null ? "null" : c.prevLocation.getCoordinate().toString();
+        String loc = c.location == null ? "null" : c.location.getCoordinate().toString();
+        String type = c instanceof GoalConstraint ? "GOAL" : "REG";
+
+        return type + "|a=" + agentId + "|t=" + c.time + "|prev=" + prev + "|loc=" + loc;
     }
 
     /**
@@ -439,6 +1190,14 @@ public class CBS_Solver extends A_Solver {
      */
     private CBS_Node generateNode(CBS_Node parent, Constraint constraint, boolean copyDatastructures) {
         Agent agent = constraint.agent;
+
+        // Debugging printing for NUA-CBS
+        if (this.costFunction instanceof SumNUA) {
+            System.out.println("[NUA-CBS] Generate child for agent "
+                    + agent.iD
+                    + (agent.isUnassigned ? " [UA]" : " [AA]")
+                    + " with constraint: " + constraint);
+        }
 
         Solution solution = parent.solution;
 
@@ -455,17 +1214,79 @@ public class CBS_Solver extends A_Solver {
          */
         solution.putPlan(new SingleAgentPlan(agent));
 
-        //the low-level should update the solution, so this is a reference to the same object as solution. We do this to
-        //reuse Solution objects instead of creating extra ones.
-        Solution agentSolution = solveSubproblem(agent, solution, buildConstraintSet(parent, constraint));
-        if(agentSolution == null) {
-            return null; //probably a timeout
-        }
-        // in case the low-level didn't update the Solution object it was given, this makes sure we preserve other agents'
-        // plans, and add the re-planned agent's new plan.
-        solution.putPlan(agentSolution.getPlanFor(agent));
 
-        return new CBS_Node(solution, costFunction.solutionCost(solution), constraint, parent);
+        // Build the full constraint set for this child once.
+        I_ConstraintSet nodeConstraints = buildConstraintSet(parent, constraint);
+
+        // The low-level should update the solution.
+        Solution agentSolution = solveSubproblem(agent, solution, nodeConstraints);
+
+        if(agentSolution == null) {
+            if (this.costFunction instanceof SumNUA) {
+                System.out.println("[NUA-CBS] Child pruned: low-level failed for agent "
+                        + agent.iD
+                        + (agent.isUnassigned ? " [UA]" : " [AA]"));
+            }
+            return null;
+        }
+
+        SingleAgentPlan newPlan = agentSolution.getPlanFor(agent);
+
+        if (newPlan == null) {
+            if (this.costFunction instanceof SumNUA) {
+                System.out.println("[NUA-CBS] Child pruned: low-level returned no plan for agent "
+                        + agent.iD
+                        + (agent.isUnassigned ? " [UA]" : " [AA]"));
+            }
+            return null;
+        }
+
+        /*
+        * Important:
+        * If the new plan itself violates the constraint that generated this child,
+        * this child is useless and will reproduce the same conflict.
+        */
+        if (constraint.rejects(newPlan)) {
+            if (this.costFunction instanceof SumNUA) {
+                System.out.println("[NUA-CBS] Child pruned: new plan violates its own constraint "
+                        + constraint);
+            }
+            return null;
+        }
+
+        /*
+        * Important:
+        * If the plan ends at a location that will be rejected by some future constraint,
+        * then CBS will keep seeing the same conflict after the plan end.
+        *
+        * This is exactly what happened when UA returned endTime=2 while the conflict was at t=37.
+        */
+        Move lastMove = newPlan.moveAt(newPlan.getEndTime());
+
+        if (lastMove == null || !nodeConstraints.acceptsForever(lastMove)) {
+            if (this.costFunction instanceof SumNUA) {
+                System.out.println("[NUA-CBS] Child pruned: plan cannot safely stay forever after endTime"
+                        + " agent=" + agent.iD
+                        + (agent.isUnassigned ? " [UA]" : " [AA]")
+                        + " endTime=" + newPlan.getEndTime());
+            }
+            return null;
+        }
+
+        // Preserve other agents' plans and add the re-planned agent's new plan.
+        solution.putPlan(newPlan);
+
+        // Debugging printing for NUA-CBS
+        if (this.costFunction instanceof SumNUA) {
+            System.out.println("[NUA-CBS] New path for agent "
+                    + agent.iD
+                    + (agent.isUnassigned ? " [UA]" : " [AA]")
+                    + ": size=" + newPlan.size()
+                    + ", endTime=" + newPlan.getEndTime()
+                    + ", nua=" + (agent.isUnassigned ? newPlan.nua() : -1));
+        }
+
+        return new CBS_Node(solution, computeNodeCost(solution), constraint, parent);
     }
 
     /**
@@ -788,19 +1609,30 @@ public class CBS_Solver extends A_Solver {
 
     }
 
-    public static class CBSNodeComparatorForcedTotalOrdering implements Comparator<CBS_Node>{
-
-        private static final Comparator<CBS_Node> costComparator = Comparator.comparing(CBS_Node::getSolutionCost);
+    public static class CBSNodeComparatorForcedTotalOrdering implements Comparator<CBS_Node> {
 
         @Override
         public int compare(CBS_Node o1, CBS_Node o2) {
-            if(Math.abs(o1.getSolutionCost() - o2.getSolutionCost()) < 0.1){ // floats are equal
-                // If still equal, we tie break for smaller ID (older nodes) (arbitrary) to force a total ordering and remain deterministic
-                return o2.serialID- o1.serialID;
+            int costCompare = Float.compare(o1.getSolutionCost(), o2.getSolutionCost());
+            if (costCompare != 0) {
+                return costCompare;
             }
-            else {
-                return costComparator.compare(o1, o2);
+
+            /*
+            * Technical tie-break only.
+            * This does not change the optimization objective.
+            * It only helps CBS avoid exploring very long equal-NUA branches first.
+            */
+            int endTimeCompare = Integer.compare(
+                    o1.getSolution().endTime(),
+                    o2.getSolution().endTime()
+            );
+            if (endTimeCompare != 0) {
+                return endTimeCompare;
             }
+
+            // Final deterministic tie-break.
+            return Integer.compare(o1.serialID, o2.serialID);
         }
     }
 
@@ -836,6 +1668,49 @@ public class CBS_Solver extends A_Solver {
          * affect available memory.
          */
         MANUAL
+    }
+
+    private static class TRDConflict {
+        private final int loopStart;
+        private final int loopEnd;
+        private final int loopLength;
+
+        private TRDConflict(int loopStart, int loopEnd) {
+            this.loopStart = loopStart;
+            this.loopEnd = loopEnd;
+            this.loopLength = loopEnd - loopStart;
+        }
+    }
+
+    private static class LocationPair {
+        private final I_Location locationA;
+        private final I_Location locationB;
+
+        private LocationPair(I_Location locationA, I_Location locationB) {
+            this.locationA = locationA;
+            this.locationB = locationB;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) {
+                return true;
+            }
+
+            if (!(other instanceof LocationPair)) {
+                return false;
+            }
+
+            LocationPair that = (LocationPair) other;
+
+            return Objects.equals(this.locationA, that.locationA)
+                    && Objects.equals(this.locationB, that.locationB);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(locationA, locationB);
+        }
     }
 
 
