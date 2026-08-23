@@ -17,9 +17,9 @@ import Environment.Metrics.InstanceReport;
 import TransientMAPF.TransientMAPFSettings;
 
 
-public class MinNUAAStarODLaCAM_Solver extends A_Solver {
+public class MinMUAAStarODLaCAM_Solver extends A_Solver {
 
-    private int lacamMinNUA     =-1;
+    private int lacamMinMUA     =-1;
     private long lacamRuntimeMS = 0;
     private int lacamSolved     = 0;
     private long odRuntimeMS    = 0;
@@ -28,7 +28,7 @@ public class MinNUAAStarODLaCAM_Solver extends A_Solver {
     protected void init(MAPF_Instance instance, RunParameters parameters) {
         super.init(instance, parameters);
         this.name = "LaCAM_&_OD_Dynamic_UA";
-        this.setConfiguredCostFunctionName("NUA");
+        this.setConfiguredCostFunctionName("MUA");
     }
 
     @Override
@@ -37,29 +37,29 @@ public class MinNUAAStarODLaCAM_Solver extends A_Solver {
         List<Agent> uaAgents = getUAAgents(instance);
 
         // reset per-run metrics
-        this.lacamMinNUA    =-1;
+        this.lacamMinMUA    =-1;
         this.lacamRuntimeMS = 0;
         this.lacamSolved    = 0;
         this.odRuntimeMS    = 0;
 
         System.out.println("=======================================================");
-        System.out.println("[MinNUAOD] Starting. Total UA agents: " + uaAgents.size());
+        System.out.println("[MinMUAOD] Starting. Total UA agents: " + uaAgents.size());
         System.out.println("=======================================================");
 
         for (int k = 0; k <= uaAgents.size(); k++) {
             if (checkTimeout()) {
-                System.out.println("[MinNUAOD] TIMEOUT reached before finishing k=" + k);
+                System.out.println("[MinMUAOD] TIMEOUT reached before finishing k=" + k);
                 return null;
             }
 
             System.out.println("\n-------------------------------------------------------");
-            System.out.println("[LaCAM] Trying with NUA budget k=" + k);
+            System.out.println("[LaCAM] Trying with MUA budget k=" + k);
 
             // ─────────────── LaCAM ───────────────
             long lacamStart = System.currentTimeMillis();
             I_Solver lacam = new LaCAMBuilder()
                     .setTransientMAPFBehaviour(TransientMAPFSettings.defaultTransientMAPF)
-                    .setNUABudget(k)
+                    .setMUABudget(k)
                     .createLaCAM();
             Solution lacamSol = lacam.solve(instance, parameters);
             long lacamIterTime = System.currentTimeMillis() - lacamStart;
@@ -72,7 +72,7 @@ public class MinNUAAStarODLaCAM_Solver extends A_Solver {
 
             Set<Integer> movedUAIds = identifyMovedUAIds(lacamSol, instance);
             this.lacamSolved = 1;
-            this.lacamMinNUA = movedUAIds.size();
+            this.lacamMinMUA = movedUAIds.size();
 
             System.out.println("[LaCAM] k=" + k + " → FOUND! Moved UA: " + movedUAIds.size()
                     + " (iter runtime: " + lacamIterTime + " ms)"
@@ -97,7 +97,7 @@ public class MinNUAAStarODLaCAM_Solver extends A_Solver {
                     .setStaticUA(staticSet)
                     .createAStarOD();
 
-            // ── Metrics absorption (like MinNUACBS) ──
+            // ── Metrics absorption (like MinMUACBS) ──
             Environment.Metrics.InstanceReport odReport = new Environment.Metrics.InstanceReport();
             odReport.keepSolutionString = false;
 
@@ -121,13 +121,13 @@ public class MinNUAAStarODLaCAM_Solver extends A_Solver {
 
             System.out.println("[OD]    k=" + k + " → OPTIMAL solution FOUND! (runtime: " + odTime + " ms)");
             System.out.println("=======================================================");
-            System.out.println("[MinNUAOD] Done. Minimum moving UA = " + movedUAIds.size());
+            System.out.println("[MinMUAOD] Done. Minimum moving UA = " + movedUAIds.size());
             System.out.println("=======================================================\n");
 
             return sol;
         }
 
-        System.out.println("[MinNUAOD] No solution found for any k up to " + uaAgents.size());
+        System.out.println("[MinMUAOD] No solution found for any k up to " + uaAgents.size());
         return null;
     }
 
@@ -135,7 +135,7 @@ public class MinNUAAStarODLaCAM_Solver extends A_Solver {
     protected void writeMetricsToReport(Solution solution) {
         super.writeMetricsToReport(solution);
         instanceReport.putIntegerValue("LaCAM_solved", lacamSolved);
-        instanceReport.putIntegerValue("LaCAM_min_NUA", lacamMinNUA);
+        instanceReport.putIntegerValue("LaCAM_min_MUA", lacamMinMUA);
         instanceReport.putIntegerValue("LaCAM_runtime", (int) lacamRuntimeMS);
         instanceReport.putIntegerValue("OD_runtime", (int) odRuntimeMS);
     }

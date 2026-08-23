@@ -13,7 +13,7 @@ import org.jetbrains.annotations.NotNull;
 import BasicMAPF.CostFunctions.ConflictsCount;
 import BasicMAPF.CostFunctions.FuelAssigned;
 import BasicMAPF.CostFunctions.SumFuel;
-import BasicMAPF.CostFunctions.SumNUA;
+import BasicMAPF.CostFunctions.SumMUA;
 import BasicMAPF.CostFunctions.SumServiceTimes;
 import BasicMAPF.CostFunctions.SumServiceTimesAll;
 import BasicMAPF.DataTypesAndStructures.MDDs.OnePathAStarMDDBuilderFactory;
@@ -22,8 +22,8 @@ import BasicMAPF.Solvers.AStar.SingleAgentAStarSIPP_Solver;
 import BasicMAPF.Solvers.AStar.SingleAgentAStar_Solver;
 import BasicMAPF.Solvers.AStart_OD.AStarOD_Solver;
 import BasicMAPF.Solvers.AStart_OD.AStartOD_Builder;
-import BasicMAPF.Solvers.AStart_OD.MinNUAAStarODLaCAM_Solver;
-import BasicMAPF.Solvers.AStart_OD.MinNUAAStarOD_Solver;
+import BasicMAPF.Solvers.AStart_OD.MinMUAAStarODLaCAM_Solver;
+import BasicMAPF.Solvers.AStart_OD.MinMUAAStarOD_Solver;
 import BasicMAPF.Solvers.CBS.CBSBuilder;
 import BasicMAPF.Solvers.CBS.CBS_Solver;
 import BasicMAPF.Solvers.ICTS.HighLevel.ICTS_Solver;
@@ -89,10 +89,10 @@ public class CanonicalSolversFactory {
     public final static String MAASTAR_LEXICAL_NAME = "MAAStar_Lexical";
     public final static String MAASTAR_OD_NAME = "MAAStarOD";
     public final static String MAASTAR_OD_LEXICAL_NAME = "MAAStarOD_Lexical";
-    public final static String MINNUA_CBS_NAME = "MinNUA_CBS";
+    public final static String MINMUA_CBS_NAME = "MinMUA_CBS";
     public final static String AStartOD_NAME = "AStarOD";
-    public final static String MINNUA_OD_NAME = "MinNUA_AStarOD";
-    public final static String MINNUA_OD_LACAM_NAME = "MinNUA_AStarOD_LaCAM";
+    public final static String MINMUA_OD_NAME = "MinMUA_AStarOD";
+    public final static String MINMUA_OD_LACAM_NAME = "MinMUA_AStarOD_LaCAM";
 
 
     // A map of solver names to their registrations.
@@ -366,22 +366,22 @@ public class CanonicalSolversFactory {
                 CanonicalSolversFactory::createPIESIPPtSolver
         ));
 
-        regs.put(MINNUA_CBS_NAME, new SolverRegistration<>(
-                MINNUA_CBS_NAME,
-                "Minimising number of moved UA via CBS subset search (MinNUA_CBS)",
-                CanonicalSolversFactory::createMinNUACBSSolver
+        regs.put(MINMUA_CBS_NAME, new SolverRegistration<>(
+                MINMUA_CBS_NAME,
+                "Minimising number of moved UA via CBS subset search (MinMUA_CBS)",
+                CanonicalSolversFactory::createMinMUACBSSolver
         ));
 
-        regs.put(MINNUA_OD_NAME, new SolverRegistration<>(
-                MINNUA_OD_NAME,
-                "Minimising number of moved UA via A* subset search (MinNUA_OD)",
-                CanonicalSolversFactory::createAStarOD_UA_NUA_Solver
+        regs.put(MINMUA_OD_NAME, new SolverRegistration<>(
+                MINMUA_OD_NAME,
+                "Minimising number of moved UA via A* subset search (MinMUA_OD)",
+                CanonicalSolversFactory::createAStarOD_UA_MUA_Solver
         ));
 
-        regs.put(MINNUA_OD_LACAM_NAME, new SolverRegistration<>(
-                MINNUA_OD_LACAM_NAME,
-                "Minimising number of moved UA via A* subset search (MinNUA_OD_LaCAM)",
-                CanonicalSolversFactory::createAStarODLaCAM_UA_NUA_Solver
+        regs.put(MINMUA_OD_LACAM_NAME, new SolverRegistration<>(
+                MINMUA_OD_LACAM_NAME,
+                "Minimising number of moved UA via A* subset search (MinMUA_OD_LaCAM)",
+                CanonicalSolversFactory::createAStarODLaCAM_UA_MUA_Solver
         ));
 
         registrations = Collections.unmodifiableMap(regs);
@@ -683,24 +683,24 @@ public class CanonicalSolversFactory {
 
     /**
      *
-     * @return MAPF-UA problem with CBS, cost function NUA-only. 
+     * @return MAPF-UA problem with CBS, cost function MUA-only. 
      * Objective: minimize only the number of unassigned agents that moved.
      */
-    public static CBS_Solver createCBS_UA_NUA_Solver() {
+    public static CBS_Solver createCBS_UA_MUA_Solver() {
         CBS_Solver s = new CBSBuilder()
-                .setCostFunction(new SumNUA())
+                .setCostFunction(new SumMUA())
                 .setTransientMAPFSettings(TransientMAPFSettings.defaultTransientMAPF)
                 .createCBS_Solver();
-        s.setConfiguredCostFunctionName("NUA");
+        s.setConfiguredCostFunctionName("MUA");
         return s;
     }
 
     /**
      *
-     * @return Classic MAPF problem with LaCAM and CBS, cost function NUA 
+     * @return Classic MAPF problem with LaCAM and CBS, cost function MUA 
      */
-    public static BasicMAPF.Solvers.CBS.MinNUACBS_Solver createMinNUACBSSolver() {
-        return new BasicMAPF.Solvers.CBS.MinNUACBS_Solver();
+    public static BasicMAPF.Solvers.CBS.MinMUACBS_Solver createMinMUACBSSolver() {
+        return new BasicMAPF.Solvers.CBS.MinMUACBS_Solver();
     }
 
     /**
@@ -761,18 +761,18 @@ public class CanonicalSolversFactory {
 
     /**
      *
-     * @return Classic MAPF problem with A*+OD, cost function NUA
+     * @return Classic MAPF problem with A*+OD, cost function MUA
      */
-    public static MinNUAAStarOD_Solver createAStarOD_UA_NUA_Solver() {
-        return new MinNUAAStarOD_Solver();
+    public static MinMUAAStarOD_Solver createAStarOD_UA_MUA_Solver() {
+        return new MinMUAAStarOD_Solver();
     }
 
     /**
      *
-     * @return Classic MAPF problem with LaCAM and A*+OD, cost function NUA 
+     * @return Classic MAPF problem with LaCAM and A*+OD, cost function MUA 
      */
-    public static MinNUAAStarODLaCAM_Solver createAStarODLaCAM_UA_NUA_Solver() {
-        return new MinNUAAStarODLaCAM_Solver();
+    public static MinMUAAStarODLaCAM_Solver createAStarODLaCAM_UA_MUA_Solver() {
+        return new MinMUAAStarODLaCAM_Solver();
     }
 
 

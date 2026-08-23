@@ -11,7 +11,7 @@ import java.util.Objects;
 import BasicMAPF.CostFunctions.Makespan;
 import BasicMAPF.CostFunctions.MakespanServiceTime;
 import BasicMAPF.CostFunctions.SumFuel;
-import BasicMAPF.CostFunctions.SumNUA;
+import BasicMAPF.CostFunctions.SumMUA;
 import BasicMAPF.CostFunctions.SumOfCosts;
 import BasicMAPF.CostFunctions.SumServiceTimes;
 import BasicMAPF.Instances.InstanceManager;
@@ -123,7 +123,7 @@ public abstract class A_RunManager {
                     MakespanServiceTime.NAME,
                     MakespanServiceTime.NAME,
                     SumFuel.NAME,  
-                    SumNUA.NAME,   
+                    SumMUA.NAME,   
                     InstanceReport.StandardFields.expandedNodes,
                     InstanceReport.StandardFields.expansionRate,
                     InstanceReport.StandardFields.generatedNodes,

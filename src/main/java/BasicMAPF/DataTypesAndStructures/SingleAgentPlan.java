@@ -495,7 +495,7 @@ public class SingleAgentPlan implements Iterable<Move> {
     /**
      * @return the number of UA that moved of a single agent
      */
-    public int nua(){
+    public int mua(){
         for (Move m : moves){
             if (!m.prevLocation.equals(m.currLocation))
                 return 1;

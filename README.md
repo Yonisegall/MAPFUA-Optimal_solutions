@@ -115,7 +115,7 @@ In this setting:
 
 This objective models cases where movement itself is expensive, for example due to battery usage, energy consumption, or mechanical wear.
 
-### NUA — Number of Unassigned Agents
+### MUA — Number of Unassigned Agents
 
 This objective gives high priority to minimizing unnecessary UA movement.
 
@@ -317,7 +317,7 @@ Experiment outputs may include:
 * unassigned-agent movement and waiting,
 * SST cost,
 * FUEL cost,
-* NUA cost,
+* MUA cost,
 * makespan.
 
 The exact report fields can be modified in the experiment report configuration.

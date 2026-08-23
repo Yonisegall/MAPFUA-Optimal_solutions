@@ -71,10 +71,10 @@ public class GridSolutionVisualizer {
             finishedGoals.add(sumFinishedAgents.size());
         }
         int fuelValue = solution.FUEL();
-        int nuaValue = solution.NUA();
+        int muaValue = solution.MUA();
         int sstValue = solution.SST();
 
-        GridVisualizer.visualize(grids, finishedGoals, 250, title, sstValue ,fuelValue, nuaValue);
+        GridVisualizer.visualize(grids, finishedGoals, 250, title, sstValue ,fuelValue, muaValue);
         // GridVisualizer.visualize(grids, finishedGoals, 250, title);
     }
 

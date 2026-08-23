@@ -17,7 +17,7 @@ public interface I_SolutionCostFunction {
         // UA costs:
         report.putIntegerValue(SumServiceTimes.NAME, solution.SST());                   
         report.putIntegerValue(SumFuel.NAME, solution.FUEL());
-        report.putIntegerValue(SumNUA.NAME, solution.NUA());
+        report.putIntegerValue(SumMUA.NAME, solution.MUA());
         report.putIntegerValue(FuelAssigned.NAME, solution.Fuel_Assigned());
         report.putIntegerValue(SumServiceTimesAll.NAME, solution.SST_All());
 

@@ -286,7 +286,7 @@ public class Solution implements Iterable<SingleAgentPlan>{
 
     //////////////////////////////////// UA /////////////////////////////////////////
     
-    // Cost Functions for NUA problem:
+    // Cost Functions for MUA problem:
     /**
      * Calculate the SST
      */
@@ -309,13 +309,13 @@ public class Solution implements Iterable<SingleAgentPlan>{
     }
 
     /**
-     * Calculate the NUA
+     * Calculate the MUA
      */
-    public int NUA(){
+    public int MUA(){
         int cost = 0;
         for (SingleAgentPlan plan : this) {
             if (plan.agent.isUnassigned)
-                cost += plan.nua();
+                cost += plan.mua();
         }
         return cost;
     }
@@ -389,7 +389,7 @@ public class Solution implements Iterable<SingleAgentPlan>{
         }
         sb.append('\n');
         sb.append("| Fuel = ").append(this.FUEL());
-        sb.append(" | NUA = ").append(this.NUA());
+        sb.append(" | MUA = ").append(this.MUA());
         sb.append(" | SST = ").append(this.SST());
         sb.append(" | SST_All = ").append(this.SST_All());
         sb.append(" | Fuel_Assigned = ").append(this.Fuel_Assigned());

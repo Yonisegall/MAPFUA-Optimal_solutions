@@ -98,7 +98,7 @@ public class LaCAM_Solver extends A_Solver {
     private Set<Agent> staticUA = null;
     private Set<I_Location> blockedLocations = new HashSet<>();   
 
-    public int nuaBudget = 1; 
+    public int muaBudget = 1; 
     public Set<Agent> transitionMovedUA = new HashSet<>(); 
 
     /**
@@ -122,7 +122,7 @@ public class LaCAM_Solver extends A_Solver {
 
         this.constraintsSet = parameters.constraints == null ? new ConstraintSet(): parameters.constraints;
 
-        if (this.nuaBudget >= 0) {
+        if (this.muaBudget >= 0) {
             this.instance = instance; 
         } else if (this.staticObstaclesForUnassignedAgents) {
             this.unassignedAgents = new ArrayList<>();
@@ -616,8 +616,8 @@ public class LaCAM_Solver extends A_Solver {
                 }
             }
             while (C.parent != null) {
-                // ✅ enforce NUA budget for low-level enforced moves
-                if (!enforceNUABudgetForPlannedMove(C.who, C.where)) {
+                // ✅ enforce MUA budget for low-level enforced moves
+                if (!enforceMUABudgetForPlannedMove(C.who, C.where)) {
                     return null;
                 }
                 this.occupiedNextConfig.put(C.who, C.where);
@@ -656,8 +656,8 @@ public class LaCAM_Solver extends A_Solver {
                     }
                 }
 
-                // ✅ enforce NUA budget for low-level enforced moves
-                if (!enforceNUABudgetForPlannedMove(C.who, C.where)) {
+                // ✅ enforce MUA budget for low-level enforced moves
+                if (!enforceMUABudgetForPlannedMove(C.who, C.where)) {
                     return null;
                 }
 
@@ -698,7 +698,7 @@ public class LaCAM_Solver extends A_Solver {
         }
         
         if (currentAgent.isUnassigned && !this.transitionMovedUA.contains(currentAgent)) {
-            if (this.transitionMovedUA.size() >= this.nuaBudget) {
+            if (this.transitionMovedUA.size() >= this.muaBudget) {
                 candidates.clear();
                 candidates.add(currentLocation);
             }
@@ -766,12 +766,12 @@ public class LaCAM_Solver extends A_Solver {
                 }
             }
 
-            // ✅ Enforce NUA budget for PIBT-chosen move (currentAgent -> nextLocation)
+            // ✅ Enforce MUA budget for PIBT-chosen move (currentAgent -> nextLocation)
             boolean addedNow = false;
             if (currentAgent.isUnassigned) {
                 boolean wasCounted = this.transitionMovedUA.contains(currentAgent);
 
-                if (!enforceNUABudgetForPlannedMove(currentAgent, nextLocation)) {
+                if (!enforceMUABudgetForPlannedMove(currentAgent, nextLocation)) {
                     // can't allow this move under current k
                     continue;
                 }
@@ -870,8 +870,8 @@ public class LaCAM_Solver extends A_Solver {
         return this.instance.map.getMapLocation(a.source);
     }
     
-    // Enforce NUA budget also for moves that come from the low-level tree (C.who -> C.where)
-    private boolean enforceNUABudgetForPlannedMove(Agent agent, I_Location nextLocation) {
+    // Enforce MUA budget also for moves that come from the low-level tree (C.who -> C.where)
+    private boolean enforceMUABudgetForPlannedMove(Agent agent, I_Location nextLocation) {
         if (!agent.isUnassigned) {
             return true;
         }
@@ -889,7 +889,7 @@ public class LaCAM_Solver extends A_Solver {
         }
 
         // first time leaving source in this subtree -> must respect budget
-        if (this.transitionMovedUA.size() >= this.nuaBudget) {
+        if (this.transitionMovedUA.size() >= this.muaBudget) {
             return false;
         }
 

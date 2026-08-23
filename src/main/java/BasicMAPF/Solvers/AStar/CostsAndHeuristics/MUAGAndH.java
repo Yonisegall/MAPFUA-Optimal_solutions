@@ -8,7 +8,7 @@ import BasicMAPF.Instances.Maps.I_Location;
 import BasicMAPF.Solvers.AStar.SingleAgentAStar_Solver;
 
 /**
- * A {@link SingleAgentGAndH} that wraps another implementation for NUA (Non-Unit Acceleration) cost function.
+ * A {@link SingleAgentGAndH} that wraps another implementation for MUA (Non-Unit Acceleration) cost function.
  * 
  * Assigned Agent (before reaching target): cost = 1, heuristic = distance
  * Unassigned Agent (after reaching target):
@@ -16,7 +16,7 @@ import BasicMAPF.Solvers.AStar.SingleAgentAStar_Solver;
  *   - Subsequent moves/waits = 0
  *   - Heuristic = 0
  */
-public class NUAGAndH implements SingleAgentGAndH {
+public class MUAGAndH implements SingleAgentGAndH {
 
     private final SingleAgentGAndH gAndH;
 
@@ -24,7 +24,7 @@ public class NUAGAndH implements SingleAgentGAndH {
      * Constructor.
      * @param gAndH delegate to this {@link SingleAgentGAndH}
      */
-    public NUAGAndH(@NotNull SingleAgentGAndH gAndH) {
+    public MUAGAndH(@NotNull SingleAgentGAndH gAndH) {
         this.gAndH = gAndH;
     }
 
@@ -48,7 +48,7 @@ public class NUAGAndH implements SingleAgentGAndH {
     }
 
     /**
-     * NUA cost:
+     * MUA cost:
      * - Assigned: cost = 1
      * - Unassigned (after target):
      *     - First move: cost = 1
@@ -126,7 +126,7 @@ public class NUAGAndH implements SingleAgentGAndH {
         /*
         * The UA has already moved before.
         *
-        * This is NOT part of the high-level NUA objective.
+        * This is NOT part of the high-level MUA objective.
         * It is only a low-level technical tie-break so A* prefers shorter,
         * finite paths instead of wandering/waiting forever with cost 0.
         */

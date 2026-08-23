@@ -16,7 +16,7 @@ import org.jetbrains.annotations.Nullable;
 
 import BasicMAPF.CostFunctions.I_SolutionCostFunction;
 import BasicMAPF.CostFunctions.SumFuel;
-import BasicMAPF.CostFunctions.SumNUA;
+import BasicMAPF.CostFunctions.SumMUA;
 import BasicMAPF.CostFunctions.SumOfCosts;
 import BasicMAPF.CostFunctions.SumServiceTimes;
 import BasicMAPF.DataTypesAndStructures.Move;
@@ -32,7 +32,7 @@ import BasicMAPF.Instances.Maps.I_Map;
 import BasicMAPF.Solvers.AStar.CostsAndHeuristics.CachingDistanceTableHeuristic;
 import BasicMAPF.Solvers.AStar.CostsAndHeuristics.DistanceTableSingleAgentHeuristic;
 import BasicMAPF.Solvers.AStar.CostsAndHeuristics.FuelGAndH;
-import BasicMAPF.Solvers.AStar.CostsAndHeuristics.NUAGAndH;
+import BasicMAPF.Solvers.AStar.CostsAndHeuristics.MUAGAndH;
 import BasicMAPF.Solvers.AStar.CostsAndHeuristics.ServiceTimeGAndH;
 import BasicMAPF.Solvers.AStar.CostsAndHeuristics.SingleAgentGAndH;
 import BasicMAPF.Solvers.A_Solver;
@@ -113,7 +113,7 @@ public class AStarOD_Solver extends A_Solver {
             }
         }
 
-        // Case 2: SOME UA are static obstacles (set by MinNUAOD via setStaticUA)
+        // Case 2: SOME UA are static obstacles (set by MinMUAOD via setStaticUA)
         if (this.staticUA != null && !this.staticUA.isEmpty()) {
             java.util.HashSet<Integer> ids = new java.util.HashSet<>();
             for (Agent a : this.staticUA) ids.add(a.iD);
@@ -134,8 +134,8 @@ public class AStarOD_Solver extends A_Solver {
             this.singleAgentGAndH = new ServiceTimeGAndH(this.singleAgentGAndH);
         } else if (this.costFunction instanceof SumFuel && !(this.singleAgentGAndH instanceof FuelGAndH)) {
             this.singleAgentGAndH = new FuelGAndH(this.singleAgentGAndH);
-        } else if (this.costFunction instanceof SumNUA && !(this.singleAgentGAndH instanceof NUAGAndH)) {
-            this.singleAgentGAndH = new NUAGAndH(this.singleAgentGAndH);
+        } else if (this.costFunction instanceof SumMUA && !(this.singleAgentGAndH instanceof MUAGAndH)) {
+            this.singleAgentGAndH = new MUAGAndH(this.singleAgentGAndH);
         }
 
         // ═══════════════ Search structures ═══════════════

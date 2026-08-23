@@ -15,7 +15,7 @@ import org.jetbrains.annotations.Nullable;
 
 import BasicMAPF.CostFunctions.I_SolutionCostFunction;
 import BasicMAPF.CostFunctions.SumFuel;
-import BasicMAPF.CostFunctions.SumNUA;
+import BasicMAPF.CostFunctions.SumMUA;
 import BasicMAPF.CostFunctions.SumOfCosts;
 import BasicMAPF.CostFunctions.SumServiceTimes;
 import BasicMAPF.DataTypesAndStructures.I_OpenList;
@@ -32,7 +32,7 @@ import BasicMAPF.Instances.Maps.I_Location;
 import BasicMAPF.Solvers.AStar.CostsAndHeuristics.CachingDistanceTableHeuristic;
 import BasicMAPF.Solvers.AStar.CostsAndHeuristics.DistanceTableSingleAgentHeuristic;
 import BasicMAPF.Solvers.AStar.CostsAndHeuristics.FuelGAndH;
-import BasicMAPF.Solvers.AStar.CostsAndHeuristics.NUAGAndH;
+import BasicMAPF.Solvers.AStar.CostsAndHeuristics.MUAGAndH;
 import BasicMAPF.Solvers.AStar.CostsAndHeuristics.ServiceTimeGAndH;
 import BasicMAPF.Solvers.AStar.CostsAndHeuristics.SingleAgentGAndH;
 import BasicMAPF.Solvers.AStar.RunParameters_SAAStar;
@@ -261,8 +261,8 @@ public class CBS_Solver extends A_Solver {
                     this.singleAgentGAndH = new ServiceTimeGAndH(this.singleAgentGAndH);
                 } else if (this.costFunction instanceof SumFuel) {
                     this.singleAgentGAndH = new FuelGAndH(this.singleAgentGAndH);
-                } else if (this.costFunction instanceof SumNUA) {
-                    this.singleAgentGAndH = new NUAGAndH(this.singleAgentGAndH);
+                } else if (this.costFunction instanceof SumMUA) {
+                    this.singleAgentGAndH = new MUAGAndH(this.singleAgentGAndH);
                 }
             }
         }
@@ -294,7 +294,7 @@ public class CBS_Solver extends A_Solver {
      */
     private void initOpen(I_ConstraintSet initialConstraints) {
         if(this.openListManagementMode == OpenListManagementMode.AUTOMATIC ||
-                this.openListManagementMode == OpenListManagementMode.AUTO_INIT_MANUAL_CLEAR){
+                this.openListManagementMode == OpenListManagementMode.AUTO_INIT_MAMUAL_CLEAR){
             addToOpen(generateRoot(initialConstraints));
         }
     }
@@ -340,7 +340,7 @@ public class CBS_Solver extends A_Solver {
         while(!openList.isEmpty() && !checkTimeout()){
             CBS_Node node = openList.poll();
 
-            if (this.costFunction instanceof SumNUA) {
+            if (this.costFunction instanceof SumMUA) {
                 float updatedCost = computeNodeCost(node.getSolution());
 
                 if (updatedCost > node.solutionCost) {
@@ -350,12 +350,12 @@ public class CBS_Solver extends A_Solver {
                 }
             }
 
-            // Debugging printing for NUA-CBS
-            if (this.costFunction instanceof SumNUA) {
-                System.out.println("\n[NUA-CBS] Poll node"
+            // Debugging printing for MUA-CBS
+            if (this.costFunction instanceof SumMUA) {
+                System.out.println("\n[MUA-CBS] Poll node"
                         + " id=" + node.serialID
                         + " cost=" + node.getSolutionCost()
-                        + " NUA=" + node.getSolution().NUA()
+                        + " MUA=" + node.getSolution().MUA()
                         + " endTime=" + node.getSolution().endTime()
                         + " openSize=" + openList.size());
             }
@@ -367,20 +367,20 @@ public class CBS_Solver extends A_Solver {
             // If there are no conflicts, this is a valid solution.
             // Do NOT apply TRDP before accepting a conflict-free solution.
             if (isGoal(node)) {
-                if (this.costFunction instanceof SumNUA) {
-                    System.out.println("[NUA-CBS] Goal candidate: no conflicts");
+                if (this.costFunction instanceof SumMUA) {
+                    System.out.println("[MUA-CBS] Goal candidate: no conflicts");
                 }
                 return node;
             }
 
-            // NUA-CBS + TRDP:
+            // MUA-CBS + TRDP:
             // If the current solution is not a goal and contains a repeated global
             // configuration, branch on the TRD conflict instead of a normal pairwise conflict.
-            if (this.costFunction instanceof SumNUA) {
+            if (this.costFunction instanceof SumMUA) {
                 TRDConflict trdConflict = findTRDConflict(node.getSolution());
 
-            if (trdConflict != null && node.getSolution().NUA() == 0) {
-                System.out.println("[NUA-CBS-TRDP] Pruning NUA=0 node with repeated global configuration"
+            if (trdConflict != null && node.getSolution().MUA() == 0) {
+                System.out.println("[MUA-CBS-TRDP] Pruning MUA=0 node with repeated global configuration"
                         + " from t=" + trdConflict.loopStart
                         + " to t=" + trdConflict.loopEnd
                         + " | length=" + trdConflict.loopLength);
@@ -389,8 +389,8 @@ public class CBS_Solver extends A_Solver {
             }
             }
 
-            if (this.costFunction instanceof SumNUA) {
-                System.out.println("[NUA-CBS] Selected conflict: " + node.selectedConflict);
+            if (this.costFunction instanceof SumMUA) {
+                System.out.println("[MUA-CBS] Selected conflict: " + node.selectedConflict);
             }
 
             if (this.transientMAPFSettings.resolveAfterGoalConflictsLocally()) {
@@ -439,9 +439,9 @@ public class CBS_Solver extends A_Solver {
 
     private void expandNode(CBS_Node node) {
 
-        // Debugging printing for NUA-CBS
-        if (this.costFunction instanceof SumNUA) {
-            System.out.println("[NUA-CBS] Expanding node"
+        // Debugging printing for MUA-CBS
+        if (this.costFunction instanceof SumMUA) {
+            System.out.println("[MUA-CBS] Expanding node"
                     + " id=" + node.serialID
                     + " cost=" + node.getSolutionCost()
                     + " conflict=" + node.selectedConflict);
@@ -452,7 +452,7 @@ public class CBS_Solver extends A_Solver {
         // Special handling for FUEL: if there is a timestep where all agents stay,
         // branch into one child per agent, forbidding that agent to stay at that timestep.
         if (this.costFunction instanceof SumFuel) {
-        // if (this.costFunction instanceof SumFuel || this.costFunction instanceof SumNUA) {
+        // if (this.costFunction instanceof SumFuel || this.costFunction instanceof SumMUA) {
             Solution sol = node.getSolution();
             int last = sol.endTime();
             for (int t = 1; t <= last; t++) {
@@ -488,31 +488,31 @@ public class CBS_Solver extends A_Solver {
         // default (pairwise conflict) expansion
         Constraint[] constraints = node.selectedConflict.getPreventingConstraints();
 
-        // Debugging printing for NUA-CBS
-        if (this.costFunction instanceof SumNUA) {
-            System.out.println("[NUA-CBS] Generating CBS children");
+        // Debugging printing for MUA-CBS
+        if (this.costFunction instanceof SumMUA) {
+            System.out.println("[MUA-CBS] Generating CBS children");
 
             Agent a1 = constraints[0].agent;
             Agent a2 = constraints[1].agent;
 
-            System.out.println("[NUA-CBS] Conflict agents:"
+            System.out.println("[MUA-CBS] Conflict agents:"
                     + " c0.agent=" + a1.iD + (a1.isUnassigned ? " [UA]" : " [AA]")
                     + ", c1.agent=" + a2.iD + (a2.isUnassigned ? " [UA]" : " [AA]"));
 
             SingleAgentPlan p1 = node.getSolution().getPlanFor(a1);
             SingleAgentPlan p2 = node.getSolution().getPlanFor(a2);
 
-            System.out.println("[NUA-CBS] p1.nua=" + (a1.isUnassigned ? p1.nua() : -1));
-            System.out.println("[NUA-CBS] p2.nua=" + (a2.isUnassigned ? p2.nua() : -1));
+            System.out.println("[MUA-CBS] p1.mua=" + (a1.isUnassigned ? p1.mua() : -1));
+            System.out.println("[MUA-CBS] p2.mua=" + (a2.isUnassigned ? p2.mua() : -1));
 
-            System.out.println("[NUA-CBS] Left constraint:  " + constraints[0]);
-            System.out.println("[NUA-CBS] Right constraint: " + constraints[1]);
+            System.out.println("[MUA-CBS] Left constraint:  " + constraints[0]);
+            System.out.println("[MUA-CBS] Right constraint: " + constraints[1]);
 
-            if (tryExpandNUAConflictWithStaticUABranch(node, constraints)) {
+            if (tryExpandMUAConflictWithStaticUABranch(node, constraints)) {
                 return;
             }
 
-            if (tryExpandNUAConflictWithActiveUAAtAASourceOrTarget(node, constraints)) {
+            if (tryExpandMUAConflictWithActiveUAAtAASourceOrTarget(node, constraints)) {
                 return;
             }
         }
@@ -525,7 +525,7 @@ public class CBS_Solver extends A_Solver {
     }
 
     /**
-     * Special branching for NUA-only CBS.
+     * Special branching for MUA-only CBS.
      *
      * Handles conflicts between:
      *   - any moving / active agent
@@ -538,7 +538,7 @@ public class CBS_Solver extends A_Solver {
      * Standard CBS creates a one-time constraint:
      *   activeAgent cannot be at stationaryUA.source at time t
      *
-     * In NUA, this is too weak.
+     * In MUA, this is too weak.
      * If the stationary UA does not move, its source is blocked forever.
      *
      * Therefore we create:
@@ -549,10 +549,10 @@ public class CBS_Solver extends A_Solver {
      *   Child 2:
      *      stationary UA receives the regular conflict constraint and may move.
      *
-     * @return true if the special NUA branching was applied.
+     * @return true if the special MUA branching was applied.
      */
-    private boolean tryExpandNUAConflictWithStaticUABranch(CBS_Node node, Constraint[] constraints) {
-        if (!(this.costFunction instanceof SumNUA)) {
+    private boolean tryExpandMUAConflictWithStaticUABranch(CBS_Node node, Constraint[] constraints) {
+        if (!(this.costFunction instanceof SumMUA)) {
             return false;
         }
 
@@ -577,8 +577,8 @@ public class CBS_Solver extends A_Solver {
             return false;
         }
 
-        boolean agent0IsStationaryUA = agent0.isUnassigned && plan0.nua() == 0;
-        boolean agent1IsStationaryUA = agent1.isUnassigned && plan1.nua() == 0;
+        boolean agent0IsStationaryUA = agent0.isUnassigned && plan0.mua() == 0;
+        boolean agent1IsStationaryUA = agent1.isUnassigned && plan1.mua() == 0;
 
         /*
         * We need exactly one stationary UA.
@@ -609,7 +609,7 @@ public class CBS_Solver extends A_Solver {
         if (!activeAgent.isUnassigned
             && !canAgentReachTargetWithoutLocation(activeAgent, stationaryLocation)) {
             if (forcedMovedUAIds.add(stationaryUA.iD)) {
-                System.out.println("[NUA-CBS] Forced UA detected: UA "
+                System.out.println("[MUA-CBS] Forced UA detected: UA "
                         + stationaryUA.iD
                         + " must move because AA "
                         + activeAgent.iD
@@ -619,12 +619,12 @@ public class CBS_Solver extends A_Solver {
             }
         }
 
-        System.out.println("[NUA-CBS] Applying special active-agent vs stationary-UA branch");
-        System.out.println("[NUA-CBS] Child 1: active agent " + activeAgent.iD
+        System.out.println("[MUA-CBS] Applying special active-agent vs stationary-UA branch");
+        System.out.println("[MUA-CBS] Child 1: active agent " + activeAgent.iD
                 + (activeAgent.isUnassigned ? " [UA]" : " [AA]")
                 + " avoids stationary UA " + stationaryUA.iD
                 + " at " + stationaryLocation + " forever");
-        System.out.println("[NUA-CBS] Child 2: stationary UA " + stationaryUA.iD
+        System.out.println("[MUA-CBS] Child 2: stationary UA " + stationaryUA.iD
                 + " replans with regular constraint " + stationaryUARegularConstraint);
 
         /*
@@ -645,7 +645,7 @@ public class CBS_Solver extends A_Solver {
         /*
         * Child 2:
         * Force the stationary UA to resolve the conflict.
-        * This may increase NUA by 1.
+        * This may increase MUA by 1.
         */
         CBS_Node stationaryUAMovesChild = generateNode(node, stationaryUARegularConstraint, true);
 
@@ -658,8 +658,8 @@ public class CBS_Solver extends A_Solver {
         return true;
     }
 
-    private boolean tryExpandNUAConflictWithActiveUAAtAASourceOrTarget(CBS_Node node, Constraint[] constraints) {
-        if (!(this.costFunction instanceof SumNUA)) {
+    private boolean tryExpandMUAConflictWithActiveUAAtAASourceOrTarget(CBS_Node node, Constraint[] constraints) {
+        if (!(this.costFunction instanceof SumMUA)) {
             return false;
         }
 
@@ -685,7 +685,7 @@ public class CBS_Solver extends A_Solver {
         Agent uaAgent = a0.isUnassigned ? a0 : a1;
 
         SingleAgentPlan uaPlan = node.getSolution().getPlanFor(uaAgent);
-        if (uaPlan == null || uaPlan.nua() == 0) {
+        if (uaPlan == null || uaPlan.mua() == 0) {
             return false;
         }
 
@@ -705,8 +705,8 @@ public class CBS_Solver extends A_Solver {
             return false;
         }
 
-        System.out.println("[NUA-CBS] Active UA blocks AA source/target");
-        System.out.println("[NUA-CBS] Forcing UA " + uaAgent.iD
+        System.out.println("[MUA-CBS] Active UA blocks AA source/target");
+        System.out.println("[MUA-CBS] Forcing UA " + uaAgent.iD
                 + " to avoid " + conflictLocation + " forever");
 
         Constraint uaAvoidsAASourceOrTargetForever = new GoalConstraint(
@@ -728,7 +728,7 @@ public class CBS_Solver extends A_Solver {
     }
 
     private boolean tryExpandAADeadlockByActivatingUA(CBS_Node node, Constraint[] constraints) {
-        if (!(this.costFunction instanceof SumNUA)) {
+        if (!(this.costFunction instanceof SumMUA)) {
             return false;
         }
 
@@ -772,7 +772,7 @@ public class CBS_Solver extends A_Solver {
             return false;
         }
 
-        System.out.println("[NUA-CBS] AA-AA deadlock detected between AA "
+        System.out.println("[MUA-CBS] AA-AA deadlock detected between AA "
                 + a0.iD + " and AA " + a1.iD
                 + " while currently-stationary UA source cells are blocked");
 
@@ -807,7 +807,7 @@ public class CBS_Solver extends A_Solver {
             Agent forcedUA = activationCandidates.get(0);
             forcedMovedUAIds.add(forcedUA.iD);
 
-            System.out.println("[NUA-CBS] Forced UA detected from AA-AA deadlock: UA "
+            System.out.println("[MUA-CBS] Forced UA detected from AA-AA deadlock: UA "
                     + forcedUA.iD + " must move / free its source");
         }
 
@@ -820,7 +820,7 @@ public class CBS_Solver extends A_Solver {
                 continue;
             }
 
-            System.out.println("[NUA-CBS] Activating UA " + ua.iD
+            System.out.println("[MUA-CBS] Activating UA " + ua.iD
                     + " and forcing it to avoid its source forever: "
                     + uaSource);
 
@@ -848,7 +848,7 @@ public class CBS_Solver extends A_Solver {
         for (SingleAgentPlan plan : node.getSolution()) {
             Agent agent = plan.agent;
 
-            if (agent.isUnassigned && plan.nua() == 0) {
+            if (agent.isUnassigned && plan.mua() == 0) {
                 stationary.add(agent);
             }
         }
@@ -1046,7 +1046,7 @@ public class CBS_Solver extends A_Solver {
                     repeatedLocation
             );
 
-            System.out.println("[NUA-CBS-TRDP] Child: agent "
+            System.out.println("[MUA-CBS-TRDP] Child: agent "
                     + agent.iD
                     + (agent.isUnassigned ? " [UA]" : " [AA]")
                     + " cannot be at "
@@ -1080,11 +1080,11 @@ public class CBS_Solver extends A_Solver {
             return false;
         }
 
-        if (this.costFunction instanceof SumNUA) {
+        if (this.costFunction instanceof SumMUA) {
             String signature = constraintPathSignature(node);
 
             if (seenConstraintSignatures.contains(signature)) {
-                System.out.println("[NUA-CBS] Duplicate node pruned");
+                System.out.println("[MUA-CBS] Duplicate node pruned");
                 return false;
             }
 
@@ -1095,11 +1095,11 @@ public class CBS_Solver extends A_Solver {
     }
 
     private float computeNodeCost(Solution solution) {
-        if (!(this.costFunction instanceof SumNUA)) {
+        if (!(this.costFunction instanceof SumMUA)) {
             return this.costFunction.solutionCost(solution);
         }
 
-        int cost = solution.NUA();
+        int cost = solution.MUA();
 
         for (Integer forcedUAId : forcedMovedUAIds) {
             if (!isUAIdMovedInSolution(solution, forcedUAId)) {
@@ -1113,7 +1113,7 @@ public class CBS_Solver extends A_Solver {
     private boolean isUAIdMovedInSolution(Solution solution, int uaId) {
         for (SingleAgentPlan plan : solution) {
             if (plan.agent.iD == uaId) {
-                return plan.agent.isUnassigned && plan.nua() != 0;
+                return plan.agent.isUnassigned && plan.mua() != 0;
             }
         }
 
@@ -1191,9 +1191,9 @@ public class CBS_Solver extends A_Solver {
     private CBS_Node generateNode(CBS_Node parent, Constraint constraint, boolean copyDatastructures) {
         Agent agent = constraint.agent;
 
-        // Debugging printing for NUA-CBS
-        if (this.costFunction instanceof SumNUA) {
-            System.out.println("[NUA-CBS] Generate child for agent "
+        // Debugging printing for MUA-CBS
+        if (this.costFunction instanceof SumMUA) {
+            System.out.println("[MUA-CBS] Generate child for agent "
                     + agent.iD
                     + (agent.isUnassigned ? " [UA]" : " [AA]")
                     + " with constraint: " + constraint);
@@ -1222,8 +1222,8 @@ public class CBS_Solver extends A_Solver {
         Solution agentSolution = solveSubproblem(agent, solution, nodeConstraints);
 
         if(agentSolution == null) {
-            if (this.costFunction instanceof SumNUA) {
-                System.out.println("[NUA-CBS] Child pruned: low-level failed for agent "
+            if (this.costFunction instanceof SumMUA) {
+                System.out.println("[MUA-CBS] Child pruned: low-level failed for agent "
                         + agent.iD
                         + (agent.isUnassigned ? " [UA]" : " [AA]"));
             }
@@ -1233,8 +1233,8 @@ public class CBS_Solver extends A_Solver {
         SingleAgentPlan newPlan = agentSolution.getPlanFor(agent);
 
         if (newPlan == null) {
-            if (this.costFunction instanceof SumNUA) {
-                System.out.println("[NUA-CBS] Child pruned: low-level returned no plan for agent "
+            if (this.costFunction instanceof SumMUA) {
+                System.out.println("[MUA-CBS] Child pruned: low-level returned no plan for agent "
                         + agent.iD
                         + (agent.isUnassigned ? " [UA]" : " [AA]"));
             }
@@ -1247,8 +1247,8 @@ public class CBS_Solver extends A_Solver {
         * this child is useless and will reproduce the same conflict.
         */
         if (constraint.rejects(newPlan)) {
-            if (this.costFunction instanceof SumNUA) {
-                System.out.println("[NUA-CBS] Child pruned: new plan violates its own constraint "
+            if (this.costFunction instanceof SumMUA) {
+                System.out.println("[MUA-CBS] Child pruned: new plan violates its own constraint "
                         + constraint);
             }
             return null;
@@ -1264,8 +1264,8 @@ public class CBS_Solver extends A_Solver {
         Move lastMove = newPlan.moveAt(newPlan.getEndTime());
 
         if (lastMove == null || !nodeConstraints.acceptsForever(lastMove)) {
-            if (this.costFunction instanceof SumNUA) {
-                System.out.println("[NUA-CBS] Child pruned: plan cannot safely stay forever after endTime"
+            if (this.costFunction instanceof SumMUA) {
+                System.out.println("[MUA-CBS] Child pruned: plan cannot safely stay forever after endTime"
                         + " agent=" + agent.iD
                         + (agent.isUnassigned ? " [UA]" : " [AA]")
                         + " endTime=" + newPlan.getEndTime());
@@ -1276,14 +1276,14 @@ public class CBS_Solver extends A_Solver {
         // Preserve other agents' plans and add the re-planned agent's new plan.
         solution.putPlan(newPlan);
 
-        // Debugging printing for NUA-CBS
-        if (this.costFunction instanceof SumNUA) {
-            System.out.println("[NUA-CBS] New path for agent "
+        // Debugging printing for MUA-CBS
+        if (this.costFunction instanceof SumMUA) {
+            System.out.println("[MUA-CBS] New path for agent "
                     + agent.iD
                     + (agent.isUnassigned ? " [UA]" : " [AA]")
                     + ": size=" + newPlan.size()
                     + ", endTime=" + newPlan.getEndTime()
-                    + ", nua=" + (agent.isUnassigned ? newPlan.nua() : -1));
+                    + ", mua=" + (agent.isUnassigned ? newPlan.mua() : -1));
         }
 
         return new CBS_Node(solution, computeNodeCost(solution), constraint, parent);
@@ -1401,7 +1401,7 @@ public class CBS_Solver extends A_Solver {
      */
     private void clearOPEN() {
         if(this.openListManagementMode == OpenListManagementMode.AUTOMATIC ||
-                this.openListManagementMode == OpenListManagementMode.MANUAL_INIT_AUTO_CLEAR){
+                this.openListManagementMode == OpenListManagementMode.MAMUAL_INIT_AUTO_CLEAR){
             openList.clear();
         }
     }
@@ -1621,7 +1621,7 @@ public class CBS_Solver extends A_Solver {
             /*
             * Technical tie-break only.
             * This does not change the optimization objective.
-            * It only helps CBS avoid exploring very long equal-NUA branches first.
+            * It only helps CBS avoid exploring very long equal-MUA branches first.
             */
             int endTimeCompare = Integer.compare(
                     o1.getSolution().endTime(),
@@ -1653,13 +1653,13 @@ public class CBS_Solver extends A_Solver {
          * have to manually handle the clearing of OPEN. If you keep references to many such solvers, this may adversely
          * affect available memory.
          */
-        AUTO_INIT_MANUAL_CLEAR,
+        AUTO_INIT_MAMUAL_CLEAR,
         /**
          * Will not initialize OPEN (assumes that it was already initialized), but will clear it after running.
          * It is not cleared before running. If it were to be cleared before running, manual initialization would be
          * impossible.
          */
-        MANUAL_INIT_AUTO_CLEAR,
+        MAMUAL_INIT_AUTO_CLEAR,
         /**
          * Will not initialize OPEN (assumes that it was already initialized).
          * Will not clear OPEN automatically.
@@ -1667,7 +1667,7 @@ public class CBS_Solver extends A_Solver {
          * have to manually handle the clearing of OPEN. If you keep references to many such solvers, this may adversely
          * affect available memory.
          */
-        MANUAL
+        MAMUAL
     }
 
     private static class TRDConflict {

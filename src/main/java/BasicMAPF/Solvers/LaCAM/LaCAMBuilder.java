@@ -16,7 +16,7 @@ public class LaCAMBuilder {
     private Set<Agent> staticUA = null;
 
     ////////////////////////////////////////////////////////////////
-    private int nuaBudget = -1;
+    private int muaBudget = -1;
     ////////////////////////////////////////////////////////////////
 
     public LaCAMBuilder setSolutionCostFunction(I_SolutionCostFunction solutionCostFunction) {
@@ -45,8 +45,8 @@ public class LaCAMBuilder {
     }
 
     /////////////////////////////////////////////////////////////////////////////////
-    public LaCAMBuilder setNUABudget(int budget) {
-        this.nuaBudget = budget;
+    public LaCAMBuilder setMUABudget(int budget) {
+        this.muaBudget = budget;
         return this;
     }
     /////////////////////////////////////////////////////////////////////////////////
@@ -64,7 +64,7 @@ public class LaCAMBuilder {
         LaCAM_Solver solver = new LaCAM_Solver(solutionCostFunction, transientMAPFSettings, staticObstaclesForUnassignedAgents || staticUAForUnassignedAgents);
         solver.setStaticUAForUnassignedAgents(this.staticUAForUnassignedAgents);
         solver.setStaticUA(this.staticUA);
-        solver.nuaBudget = this.nuaBudget;
+        solver.muaBudget = this.muaBudget;
         return solver;
     }
 }

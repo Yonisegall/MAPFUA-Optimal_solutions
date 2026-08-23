@@ -16,28 +16,28 @@ import Environment.Metrics.InstanceReport;
 import TransientMAPF.TransientMAPFSettings;
 
 /**
- * Minimises NUA using A*+OD alone (no LaCAM oracle).
+ * Minimises MUA using A*+OD alone (no LaCAM oracle).
  *
  * Approach:
  *   for k = 0, 1, 2, ..., |UA|:
  *       for each subset of k UA agents ("movers"):
  *           freeze the rest as static
  *           run A*+OD
- *           if solution found → return (this is optimal NUA = k)
+ *           if solution found → return (this is optimal MUA = k)
  *
  * Since A*+OD is complete and optimal, the first k that yields a solution
- * is guaranteed to be the minimum NUA.
+ * is guaranteed to be the minimum MUA.
  */
-public class MinNUAAStarOD_Solver extends A_Solver {
+public class MinMUAAStarOD_Solver extends A_Solver {
 
-    private int odMinNUA       = -1;
+    private int odMinMUA       = -1;
     private long odTotalTimeMS =  0;
 
     @Override
     protected void init(MAPF_Instance instance, RunParameters parameters) {
         super.init(instance, parameters);
         this.name = "AStarOD_Dynamic_UA";
-        this.setConfiguredCostFunctionName("NUA");
+        this.setConfiguredCostFunctionName("MUA");
     }
 
     @Override
@@ -46,17 +46,17 @@ public class MinNUAAStarOD_Solver extends A_Solver {
         List<Agent> uaAgents = getUAAgents(instance);
 
         // reset per-run metrics
-        this.odMinNUA       = -1;
+        this.odMinMUA       = -1;
         this.odTotalTimeMS  =  0;
 
         System.out.println("=======================================================");
-        System.out.println("[NUA_OD] Starting. Total UA agents: " + uaAgents.size());
+        System.out.println("[MUA_OD] Starting. Total UA agents: " + uaAgents.size());
         System.out.println("=======================================================");
 
         // k = number of UA that are ALLOWED to move
         for (int k = 0; k <= uaAgents.size(); k++) {
             if (checkTimeout()) {
-                System.out.println("[NUA_OD] TIMEOUT before finishing k=" + k);
+                System.out.println("[MUA_OD] TIMEOUT before finishing k=" + k);
                 return null;
             }
 
@@ -64,7 +64,7 @@ public class MinNUAAStarOD_Solver extends A_Solver {
             List<Set<Agent>> moverSubsets = chooseK(uaAgents, k);
 
             System.out.println("\n-------------------------------------------------------");
-            System.out.println("[NUA_OD] Trying k=" + k + " (" + moverSubsets.size() + " subsets)");
+            System.out.println("[MUA_OD] Trying k=" + k + " (" + moverSubsets.size() + " subsets)");
 
             for (Set<Agent> movers : moverSubsets) {
                 if (checkTimeout()) return null;
@@ -104,11 +104,11 @@ public class MinNUAAStarOD_Solver extends A_Solver {
                 this.odTotalTimeMS += odTime;
 
                 if (sol != null) {
-                    this.odMinNUA = k;
+                    this.odMinMUA = k;
 
                     System.out.println("[OD] k=" + k + " → SOLUTION FOUND! (runtime: " + odTime + " ms)");
                     System.out.println("=======================================================");
-                    System.out.println("[NUA_OD] Done. Minimum NUA = " + k);
+                    System.out.println("[MUA_OD] Done. Minimum MUA = " + k);
                     System.out.println("=======================================================\n");
 
                     return sol;
@@ -118,7 +118,7 @@ public class MinNUAAStarOD_Solver extends A_Solver {
             }
         }
 
-        System.out.println("[NUA_OD] No solution found for any k.");
+        System.out.println("[MUA_OD] No solution found for any k.");
         return null;
     }
 
@@ -127,7 +127,7 @@ public class MinNUAAStarOD_Solver extends A_Solver {
     @Override
     protected void writeMetricsToReport(Solution solution) {
         super.writeMetricsToReport(solution);
-        instanceReport.putIntegerValue("OD_min_NUA", this.odMinNUA);
+        instanceReport.putIntegerValue("OD_min_MUA", this.odMinMUA);
         instanceReport.putIntegerValue("OD_total_runtime", (int) this.odTotalTimeMS);
     }
 

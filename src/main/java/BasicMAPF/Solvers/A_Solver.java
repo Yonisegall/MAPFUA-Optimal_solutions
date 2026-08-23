@@ -368,7 +368,7 @@ public abstract class A_Solver implements I_Solver{
 
         if (src.contains("SST")) return "SST";
         if (src.contains("FUEL")) return "FUEL";
-        if (src.contains("NUA")) return "NUA";
+        if (src.contains("MUA")) return "MUA";
         return "UNKNOWN";
     }
 }

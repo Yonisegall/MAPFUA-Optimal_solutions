@@ -555,7 +555,7 @@ public class GridVisualizer extends JPanel {
         }
     }
 
-    public static void visualize(List<Color[][]> grids, @Nullable List<Integer> finishedGoals, int initialIterationTime, String title, @Nullable Integer sstValue, @Nullable Integer fuelValue, @Nullable Integer nuaValue) {
+    public static void visualize(List<Color[][]> grids, @Nullable List<Integer> finishedGoals, int initialIterationTime, String title, @Nullable Integer sstValue, @Nullable Integer fuelValue, @Nullable Integer muaValue) {
         JFrame frame = new JFrame(title);
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 
@@ -659,7 +659,7 @@ public class GridVisualizer extends JPanel {
 
         controlPanel.add(settingsPanel, BorderLayout.CENTER);
 
-        // Status panel with time step, goals, fuel and NUA - now positioned above grid
+        // Status panel with time step, goals, fuel and MUA - now positioned above grid
         JPanel statusPanel = new JPanel();
         statusPanel.setBorder(BorderFactory.createEmptyBorder(5, 0, 5, 0));
         statusPanel.setLayout(new BoxLayout(statusPanel, BoxLayout.X_AXIS));
@@ -667,7 +667,7 @@ public class GridVisualizer extends JPanel {
         JLabel finishedGoalsLabel = new JLabel();
         JLabel sstLabel = new JLabel();
         JLabel fuelLabel = new JLabel();
-        JLabel nuaLabel = new JLabel();
+        JLabel muaLabel = new JLabel();
         statusPanel.add(Box.createHorizontalGlue());
         statusPanel.add(timeStepLabel);
         statusPanel.add(Box.createHorizontalStrut(20));
@@ -677,7 +677,7 @@ public class GridVisualizer extends JPanel {
         statusPanel.add(Box.createHorizontalStrut(20));
         statusPanel.add(fuelLabel);
         statusPanel.add(Box.createHorizontalStrut(20));
-        statusPanel.add(nuaLabel);
+        statusPanel.add(muaLabel);
 
         statusPanel.add(Box.createHorizontalGlue());
 
@@ -692,10 +692,10 @@ public class GridVisualizer extends JPanel {
                 finishedGoalsLabel.setText("Finished Goals: N/A");
             }
             // fuelLabel.setText("Fuel: " + (fuelValue != null ? fuelValue : "N/A"));
-            // nuaLabel.setText("NUA: " + (nuaValue != null ? nuaValue : "N/A"));
+            // muaLabel.setText("MUA: " + (muaValue != null ? muaValue : "N/A"));
             sstLabel.setText("SST: " + sstValue);
             fuelLabel.setText("Fuel: " + fuelValue);
-            nuaLabel.setText("NUA: " + nuaValue);
+            muaLabel.setText("MUA: " + muaValue);
         });
         labelTimer.start();
 
