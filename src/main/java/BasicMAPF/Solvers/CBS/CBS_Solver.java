@@ -384,7 +384,7 @@ public class CBS_Solver extends A_Solver {
                         + " from t=" + trdConflict.loopStart
                         + " to t=" + trdConflict.loopEnd
                         + " | length=" + trdConflict.loopLength);
-
+                expandTRDNode(node, trdConflict);
                 continue;
             }
             }
