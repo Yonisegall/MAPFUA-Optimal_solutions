@@ -26,6 +26,7 @@ import BasicMAPF.Solvers.AStart_OD.MinMUAAStarODLaCAM_Solver;
 import BasicMAPF.Solvers.AStart_OD.MinMUAAStarOD_Solver;
 import BasicMAPF.Solvers.CBS.CBSBuilder;
 import BasicMAPF.Solvers.CBS.CBS_Solver;
+import BasicMAPF.Solvers.CBS.CBSStar.CBSStarMUA_Solver;
 import BasicMAPF.Solvers.ICTS.HighLevel.ICTS_Solver;
 import BasicMAPF.Solvers.LaCAM.LaCAMBuilder;
 import BasicMAPF.Solvers.LaCAM.LaCAM_Solver;
@@ -90,6 +91,7 @@ public class CanonicalSolversFactory {
     public final static String MAASTAR_OD_NAME = "MAAStarOD";
     public final static String MAASTAR_OD_LEXICAL_NAME = "MAAStarOD_Lexical";
     public final static String MINMUA_CBS_NAME = "MinMUA_CBS";
+    public final static String CBS_STAR_MUA_NAME = "CBSStarMUA";
     public final static String AStartOD_NAME = "AStarOD";
     public final static String MINMUA_OD_NAME = "MinMUA_AStarOD";
     public final static String MINMUA_OD_LACAM_NAME = "MinMUA_AStarOD_LaCAM";
@@ -370,6 +372,12 @@ public class CanonicalSolversFactory {
                 MINMUA_CBS_NAME,
                 "Minimising number of moved UA via CBS subset search (MinMUA_CBS)",
                 CanonicalSolversFactory::createMinMUACBSSolver
+        ));
+
+        regs.put(CBS_STAR_MUA_NAME, new SolverRegistration<>(
+                CBS_STAR_MUA_NAME,
+                "CBS* with loop-triggered meta-agents for MAPFUA MUA",
+                CanonicalSolversFactory::createCBSStarMUASolver
         ));
 
         regs.put(MINMUA_OD_NAME, new SolverRegistration<>(
@@ -701,6 +709,15 @@ public class CanonicalSolversFactory {
      */
     public static BasicMAPF.Solvers.CBS.MinMUACBS_Solver createMinMUACBSSolver() {
         return new BasicMAPF.Solvers.CBS.MinMUACBS_Solver();
+    }
+
+    /**
+     * @return CBS* for MAPFUA with exact MUA as the primary objective.
+     */
+    public static CBSStarMUA_Solver createCBSStarMUASolver() {
+        CBSStarMUA_Solver s = new CBSStarMUA_Solver();
+        s.setConfiguredCostFunctionName("MUA");
+        return s;
     }
 
     /**
