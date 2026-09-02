@@ -22,6 +22,10 @@ import BasicMAPF.Solvers.AStar.SingleAgentAStarSIPP_Solver;
 import BasicMAPF.Solvers.AStar.SingleAgentAStar_Solver;
 import BasicMAPF.Solvers.AStart_OD.AStarOD_Solver;
 import BasicMAPF.Solvers.AStart_OD.AStartOD_Builder;
+import BasicMAPF.Solvers.AStart_OD.MAPFUA_MA.AStarODMuaBuilder;
+import BasicMAPF.Solvers.AStart_OD.MAPFUA_MA.AStarODMuaSolver;
+import BasicMAPF.Solvers.AStart_OD.MAPFUA_MA.MapfuaObjective;
+import BasicMAPF.Solvers.AStart_OD.MAPFUA_MA.MuaHeuristicType;
 import BasicMAPF.Solvers.AStart_OD.MinMUAAStarODLaCAM_Solver;
 import BasicMAPF.Solvers.AStart_OD.MinMUAAStarOD_Solver;
 import BasicMAPF.Solvers.CBS.CBSBuilder;
@@ -92,9 +96,26 @@ public class CanonicalSolversFactory {
     public final static String MAASTAR_OD_LEXICAL_NAME = "MAAStarOD_Lexical";
     public final static String MINMUA_CBS_NAME = "MinMUA_CBS";
     public final static String CBS_STAR_MUA_NAME = "CBSStarMUA";
+    public final static String CBS_STAR_FUEL_NAME = "CBSStarFuel";
+    public final static String CBS_STAR_SST_NAME = "CBSStarSST";
     public final static String AStartOD_NAME = "AStarOD";
     public final static String MINMUA_OD_NAME = "MinMUA_AStarOD";
     public final static String MINMUA_OD_LACAM_NAME = "MinMUA_AStarOD_LaCAM";
+    public final static String ASTAR_OD_MUA_ZERO_NAME = "AStarODMUAZero";
+    public final static String ASTAR_OD_MUA_H1_MAX_NAME = "AStarODMUAH1Max";
+    public final static String ASTAR_OD_MUA_H2_ENHANCED_MAX_NAME = "AStarODMUAH2EnhancedMax";
+    public final static String ASTAR_OD_MUA_H3_JOINT_NAME = "AStarODMUAH3Joint";
+    public final static String ASTAR_OD_MUA_H4_RANDOM_PICK_NAME = "AStarODMUAH4RandomPick";
+    public final static String ASTAR_OD_FUEL_ZERO_NAME = "AStarODFuelZero";
+    public final static String ASTAR_OD_FUEL_H1_MAX_NAME = "AStarODFuelH1Max";
+    public final static String ASTAR_OD_FUEL_H2_ENHANCED_MAX_NAME = "AStarODFuelH2EnhancedMax";
+    public final static String ASTAR_OD_FUEL_H3_JOINT_NAME = "AStarODFuelH3Joint";
+    public final static String ASTAR_OD_FUEL_H4_RANDOM_PICK_NAME = "AStarODFuelH4RandomPick";
+    public final static String ASTAR_OD_SST_ZERO_NAME = "AStarODSSTZero";
+    public final static String ASTAR_OD_SST_H1_MAX_NAME = "AStarODSSTH1Max";
+    public final static String ASTAR_OD_SST_H2_ENHANCED_MAX_NAME = "AStarODSSTH2EnhancedMax";
+    public final static String ASTAR_OD_SST_H3_JOINT_NAME = "AStarODSSTH3Joint";
+    public final static String ASTAR_OD_SST_H4_RANDOM_PICK_NAME = "AStarODSSTH4RandomPick";
 
 
     // A map of solver names to their registrations.
@@ -376,8 +397,20 @@ public class CanonicalSolversFactory {
 
         regs.put(CBS_STAR_MUA_NAME, new SolverRegistration<>(
                 CBS_STAR_MUA_NAME,
-                "CBS* with loop-triggered meta-agents for MAPFUA MUA",
+                "CBS* with loop-triggered meta-agents for MAPFUA pure MUA",
                 CanonicalSolversFactory::createCBSStarMUASolver
+        ));
+
+        regs.put(CBS_STAR_FUEL_NAME, new SolverRegistration<>(
+                CBS_STAR_FUEL_NAME,
+                "CBS* with loop-triggered meta-agents for MAPFUA pure Fuel",
+                CanonicalSolversFactory::createCBSStarFuelSolver
+        ));
+
+        regs.put(CBS_STAR_SST_NAME, new SolverRegistration<>(
+                CBS_STAR_SST_NAME,
+                "CBS* with loop-triggered meta-agents for MAPFUA pure SST",
+                CanonicalSolversFactory::createCBSStarSSTSolver
         ));
 
         regs.put(MINMUA_OD_NAME, new SolverRegistration<>(
@@ -390,6 +423,96 @@ public class CanonicalSolversFactory {
                 MINMUA_OD_LACAM_NAME,
                 "Minimising number of moved UA via A* subset search (MinMUA_OD_LaCAM)",
                 CanonicalSolversFactory::createAStarODLaCAM_UA_MUA_Solver
+        ));
+
+        regs.put(ASTAR_OD_MUA_ZERO_NAME, new SolverRegistration<>(
+                ASTAR_OD_MUA_ZERO_NAME,
+                "Optimal MAPFUA-MA A*OD with pure MUA and h0 zero heuristic",
+                CanonicalSolversFactory::createAStarODMUAZeroSolver
+        ));
+
+        regs.put(ASTAR_OD_MUA_H1_MAX_NAME, new SolverRegistration<>(
+                ASTAR_OD_MUA_H1_MAX_NAME,
+                "Optimal MAPFUA-MA A*OD with h1 Max MAPFUA-CA heuristic",
+                CanonicalSolversFactory::createAStarODMUAH1MaxSolver
+        ));
+
+        regs.put(ASTAR_OD_MUA_H2_ENHANCED_MAX_NAME, new SolverRegistration<>(
+                ASTAR_OD_MUA_H2_ENHANCED_MAX_NAME,
+                "Optimal MAPFUA-MA A*OD with h2 Enhanced Max MAPFUA-CA heuristic",
+                CanonicalSolversFactory::createAStarODMUAH2EnhancedMaxSolver
+        ));
+
+        regs.put(ASTAR_OD_MUA_H3_JOINT_NAME, new SolverRegistration<>(
+                ASTAR_OD_MUA_H3_JOINT_NAME,
+                "Optimal MAPFUA-MA A*OD with h3 joint MAPFUA-CA heuristic",
+                CanonicalSolversFactory::createAStarODMUAH3JointSolver
+        ));
+
+        regs.put(ASTAR_OD_MUA_H4_RANDOM_PICK_NAME, new SolverRegistration<>(
+                ASTAR_OD_MUA_H4_RANDOM_PICK_NAME,
+                "Optimal MAPFUA-MA A*OD with h4 Random Pick MAPFUA-CA heuristic",
+                CanonicalSolversFactory::createAStarODMUAH4RandomPickSolver
+        ));
+
+        regs.put(ASTAR_OD_FUEL_ZERO_NAME, new SolverRegistration<>(
+                ASTAR_OD_FUEL_ZERO_NAME,
+                "Optimal MAPFUA-MA A*OD with pure Fuel and h0 zero heuristic",
+                CanonicalSolversFactory::createAStarODFuelZeroSolver
+        ));
+
+        regs.put(ASTAR_OD_FUEL_H1_MAX_NAME, new SolverRegistration<>(
+                ASTAR_OD_FUEL_H1_MAX_NAME,
+                "Optimal MAPFUA-MA A*OD with pure Fuel and h1 Max heuristic",
+                CanonicalSolversFactory::createAStarODFuelH1MaxSolver
+        ));
+
+        regs.put(ASTAR_OD_FUEL_H2_ENHANCED_MAX_NAME, new SolverRegistration<>(
+                ASTAR_OD_FUEL_H2_ENHANCED_MAX_NAME,
+                "Optimal MAPFUA-MA A*OD with pure Fuel and h2 Enhanced Max heuristic",
+                CanonicalSolversFactory::createAStarODFuelH2EnhancedMaxSolver
+        ));
+
+        regs.put(ASTAR_OD_FUEL_H3_JOINT_NAME, new SolverRegistration<>(
+                ASTAR_OD_FUEL_H3_JOINT_NAME,
+                "Optimal MAPFUA-MA A*OD with pure Fuel and h3 Joint heuristic",
+                CanonicalSolversFactory::createAStarODFuelH3JointSolver
+        ));
+
+        regs.put(ASTAR_OD_FUEL_H4_RANDOM_PICK_NAME, new SolverRegistration<>(
+                ASTAR_OD_FUEL_H4_RANDOM_PICK_NAME,
+                "Optimal MAPFUA-MA A*OD with pure Fuel and h4 Random Pick heuristic",
+                CanonicalSolversFactory::createAStarODFuelH4RandomPickSolver
+        ));
+
+        regs.put(ASTAR_OD_SST_ZERO_NAME, new SolverRegistration<>(
+                ASTAR_OD_SST_ZERO_NAME,
+                "Optimal MAPFUA-MA A*OD with pure SST and h0 zero heuristic",
+                CanonicalSolversFactory::createAStarODSSTZeroSolver
+        ));
+
+        regs.put(ASTAR_OD_SST_H1_MAX_NAME, new SolverRegistration<>(
+                ASTAR_OD_SST_H1_MAX_NAME,
+                "Optimal MAPFUA-MA A*OD with pure SST and h1 Max heuristic",
+                CanonicalSolversFactory::createAStarODSSTH1MaxSolver
+        ));
+
+        regs.put(ASTAR_OD_SST_H2_ENHANCED_MAX_NAME, new SolverRegistration<>(
+                ASTAR_OD_SST_H2_ENHANCED_MAX_NAME,
+                "Optimal MAPFUA-MA A*OD with pure SST and h2 Enhanced Max heuristic",
+                CanonicalSolversFactory::createAStarODSSTH2EnhancedMaxSolver
+        ));
+
+        regs.put(ASTAR_OD_SST_H3_JOINT_NAME, new SolverRegistration<>(
+                ASTAR_OD_SST_H3_JOINT_NAME,
+                "Optimal MAPFUA-MA A*OD with pure SST and h3 Joint heuristic",
+                CanonicalSolversFactory::createAStarODSSTH3JointSolver
+        ));
+
+        regs.put(ASTAR_OD_SST_H4_RANDOM_PICK_NAME, new SolverRegistration<>(
+                ASTAR_OD_SST_H4_RANDOM_PICK_NAME,
+                "Optimal MAPFUA-MA A*OD with pure SST and h4 Random Pick heuristic",
+                CanonicalSolversFactory::createAStarODSSTH4RandomPickSolver
         ));
 
         registrations = Collections.unmodifiableMap(regs);
@@ -715,8 +838,20 @@ public class CanonicalSolversFactory {
      * @return CBS* for MAPFUA with exact MUA as the primary objective.
      */
     public static CBSStarMUA_Solver createCBSStarMUASolver() {
-        CBSStarMUA_Solver s = new CBSStarMUA_Solver();
+        CBSStarMUA_Solver s = new CBSStarMUA_Solver(MapfuaObjective.MUA);
         s.setConfiguredCostFunctionName("MUA");
+        return s;
+    }
+
+    public static CBSStarMUA_Solver createCBSStarFuelSolver() {
+        CBSStarMUA_Solver s = new CBSStarMUA_Solver(MapfuaObjective.FUEL);
+        s.setConfiguredCostFunctionName("FUEL");
+        return s;
+    }
+
+    public static CBSStarMUA_Solver createCBSStarSSTSolver() {
+        CBSStarMUA_Solver s = new CBSStarMUA_Solver(MapfuaObjective.SST);
+        s.setConfiguredCostFunctionName("SST");
         return s;
     }
 
@@ -794,6 +929,76 @@ public class CanonicalSolversFactory {
 
 
 
+
+    public static AStarODMuaSolver createAStarODMUAZeroSolver() {
+        return createAStarODSolver(MapfuaObjective.MUA, MuaHeuristicType.ZERO);
+    }
+
+    public static AStarODMuaSolver createAStarODMUAH1MaxSolver() {
+        return createAStarODSolver(MapfuaObjective.MUA, MuaHeuristicType.MAX);
+    }
+
+    public static AStarODMuaSolver createAStarODMUAH2EnhancedMaxSolver() {
+        return createAStarODSolver(MapfuaObjective.MUA, MuaHeuristicType.ENHANCED_MAX);
+    }
+
+    public static AStarODMuaSolver createAStarODMUAH3JointSolver() {
+        return createAStarODSolver(MapfuaObjective.MUA, MuaHeuristicType.JOINT_CAPTURE);
+    }
+
+    public static AStarODMuaSolver createAStarODMUAH4RandomPickSolver() {
+        return createAStarODSolver(MapfuaObjective.MUA, MuaHeuristicType.RANDOM_PICK);
+    }
+
+    public static AStarODMuaSolver createAStarODFuelZeroSolver() {
+        return createAStarODSolver(MapfuaObjective.FUEL, MuaHeuristicType.ZERO);
+    }
+
+    public static AStarODMuaSolver createAStarODFuelH1MaxSolver() {
+        return createAStarODSolver(MapfuaObjective.FUEL, MuaHeuristicType.MAX);
+    }
+
+    public static AStarODMuaSolver createAStarODFuelH2EnhancedMaxSolver() {
+        return createAStarODSolver(MapfuaObjective.FUEL, MuaHeuristicType.ENHANCED_MAX);
+    }
+
+    public static AStarODMuaSolver createAStarODFuelH3JointSolver() {
+        return createAStarODSolver(MapfuaObjective.FUEL, MuaHeuristicType.JOINT_CAPTURE);
+    }
+
+    public static AStarODMuaSolver createAStarODFuelH4RandomPickSolver() {
+        return createAStarODSolver(MapfuaObjective.FUEL, MuaHeuristicType.RANDOM_PICK);
+    }
+
+    public static AStarODMuaSolver createAStarODSSTZeroSolver() {
+        return createAStarODSolver(MapfuaObjective.SST, MuaHeuristicType.ZERO);
+    }
+
+    public static AStarODMuaSolver createAStarODSSTH1MaxSolver() {
+        return createAStarODSolver(MapfuaObjective.SST, MuaHeuristicType.MAX);
+    }
+
+    public static AStarODMuaSolver createAStarODSSTH2EnhancedMaxSolver() {
+        return createAStarODSolver(MapfuaObjective.SST, MuaHeuristicType.ENHANCED_MAX);
+    }
+
+    public static AStarODMuaSolver createAStarODSSTH3JointSolver() {
+        return createAStarODSolver(MapfuaObjective.SST, MuaHeuristicType.JOINT_CAPTURE);
+    }
+
+    public static AStarODMuaSolver createAStarODSSTH4RandomPickSolver() {
+        return createAStarODSolver(MapfuaObjective.SST, MuaHeuristicType.RANDOM_PICK);
+    }
+
+    private static AStarODMuaSolver createAStarODSolver(MapfuaObjective objective, MuaHeuristicType heuristicType) {
+        AStarODMuaSolver s = new AStarODMuaBuilder()
+                .setObjective(objective)
+                .setHeuristicType(heuristicType)
+                .setTransientMAPFSettings(TransientMAPFSettings.defaultTransientMAPF)
+                .createSolver();
+        s.setConfiguredCostFunctionName(objective.reportName);
+        return s;
+    }
 
 ///////////////////////////////////////////////////////////////////////// Static UA //////////////////////////////////////////////////////////////////////////////////////
 

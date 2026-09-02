@@ -31,15 +31,14 @@ public final class CBSStarNode {
         this.root = root;
     }
 
-    CBSStarNode childWith(Constraint addedConstraint, Solution childSolution, MetaAgent replanned, long childId) {
+    CBSStarNode childWith(Constraint addedConstraint, Solution childSolution, MetaAgent replanned, int childCost, long childId) {
         ConstraintSet childConstraints = new ConstraintSet(this.constraints);
         childConstraints.add(addedConstraint);
-        return new CBSStarNode(childConstraints, childSolution, partition, replanned,
-                childSolution.MUA(), depth + 1, childId, false);
+        return new CBSStarNode(childConstraints, childSolution, partition, replanned, childCost, depth + 1, childId, false);
     }
 
-    CBSStarNode withMerge(MetaAgentPartition mergedPartition, MetaAgent mergedAgent, Solution mergedSolution, long childId) {
-        return new CBSStarNode(this.constraints, mergedSolution, mergedPartition, mergedAgent,
-                mergedSolution.MUA(), depth + 1, childId, false);
+    CBSStarNode withMerge(MetaAgentPartition mergedPartition, MetaAgent mergedAgent, Solution mergedSolution,
+                          int childCost, long childId) {
+        return new CBSStarNode(this.constraints, mergedSolution, mergedPartition, mergedAgent, childCost, depth + 1, childId, false);
     }
 }

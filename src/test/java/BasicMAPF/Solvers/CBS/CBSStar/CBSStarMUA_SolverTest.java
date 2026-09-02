@@ -121,12 +121,35 @@ class CBSStarMUA_SolverTest {
         assertEquals(0, solution.MUA());
     }
 
+    @Test
+    void cbsStarPureObjectivesMatchAStarODZeroBaselines() {
+        MAPF_Instance instance = sidePocketInstance();
+        Object[][] cases = {
+                {CanonicalSolversFactory.CBS_STAR_MUA_NAME, CanonicalSolversFactory.ASTAR_OD_MUA_ZERO_NAME},
+                {CanonicalSolversFactory.CBS_STAR_FUEL_NAME, CanonicalSolversFactory.ASTAR_OD_FUEL_ZERO_NAME},
+                {CanonicalSolversFactory.CBS_STAR_SST_NAME, CanonicalSolversFactory.ASTAR_OD_SST_ZERO_NAME}
+        };
+        for (Object[] c : cases) {
+            String cbsName = (String) c[0];
+            String astarName = (String) c[1];
+            Solution cbs = CanonicalSolversFactory.createSolver(cbsName).solve(instance, new RunParametersBuilder()
+                    .setTimeout(10_000)
+                    .setInstanceReport(Metrics.newInstanceReport())
+                    .createRP());
+            Solution astar = CanonicalSolversFactory.createSolver(astarName).solve(instance, new RunParametersBuilder()
+                    .setTimeout(10_000)
+                    .setInstanceReport(Metrics.newInstanceReport())
+                    .createRP());
+            assertNotNull(cbs, cbsName);
+            assertNotNull(astar, astarName);
+            assertCBSStarMAPFUASolution(instance, cbs);
+            assertEquals(objectiveValue(cbsName, astar), objectiveValue(cbsName, cbs), cbsName);
+        }
+    }
+
     private MAPF_Instance sidePocketInstance() {
         if (cachedSidePocket != null) return cachedSidePocket;
-        String dir = IO_Manager.buildPath(new String[]{IO_Manager.testResources_Directory, "Instances", "ArbitraryGraphs"});
-        InstanceManager manager = new InstanceManager(dir, new InstanceBuilder_ArbitraryGraph(),
-                new InstanceProperties(null, -1, new int[]{3}, "cbs_star_side_pocket.scene"));
-        MAPF_Instance instance = manager.getNextInstance();
+        MAPF_Instance instance = loadArbitrary("cbs_star_side_pocket", 3);
         assertNotNull(instance);
         cachedSidePocket = instance;
         return cachedSidePocket;
@@ -134,16 +157,24 @@ class CBSStarMUA_SolverTest {
 
     private MAPF_Instance twoVertexSwapInstance() {
         if (cachedTwoVertexSwap != null) return cachedTwoVertexSwap;
-        String dir = IO_Manager.buildPath(new String[]{IO_Manager.testResources_Directory, "Instances", "ArbitraryGraphs"});
-        InstanceBuilder_ArbitraryGraph builder = new InstanceBuilder_ArbitraryGraph();
-        InstanceManager.Moving_AI_Path path = new InstanceManager.Moving_AI_Path(
-                IO_Manager.buildPath(new String[]{dir, "two_vertex_swap.edgelist"}),
-                IO_Manager.buildPath(new String[]{dir, "two_vertex_swap.scene"}));
-        builder.prepareInstances("two_vertex_swap", path, new InstanceProperties(null, -1, new int[]{2}));
-        MAPF_Instance instance = builder.getNextExistingInstance();
+        MAPF_Instance instance = loadArbitrary("two_vertex_swap", 2);
         assertNotNull(instance);
         cachedTwoVertexSwap = instance;
         return cachedTwoVertexSwap;
+    }
+
+    private MAPF_Instance loadArbitrary(String prefix, int agents) {
+        String dir = IO_Manager.buildPath(new String[]{IO_Manager.testResources_Directory, "Instances", "ArbitraryGraphs"});
+        InstanceManager.Moving_AI_Path path = new InstanceManager.Moving_AI_Path(
+                IO_Manager.buildPath(new String[]{dir, prefix + ".edgelist"}),
+                IO_Manager.buildPath(new String[]{dir, prefix + ".scene"}));
+        for (int i = 0; i < 3; i++) {
+            InstanceBuilder_ArbitraryGraph builder = new InstanceBuilder_ArbitraryGraph();
+            builder.prepareInstances(prefix, path, new InstanceProperties(null, -1, new int[]{agents}));
+            MAPF_Instance instance = builder.getNextExistingInstance();
+            if (instance != null) return instance;
+        }
+        return null;
     }
 
     private void assertSameAgents(List<Agent> expected, MetaAgentPartition partition) {
@@ -180,5 +211,11 @@ class CBSStarMUA_SolverTest {
             if (moved) count++;
         }
         return count;
+    }
+
+    private int objectiveValue(String solverName, Solution solution) {
+        if (solverName.contains("MUA")) return solution.MUA();
+        if (solverName.contains("Fuel")) return solution.FUEL();
+        return solution.SST();
     }
 }

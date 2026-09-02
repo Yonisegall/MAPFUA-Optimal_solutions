@@ -9,6 +9,7 @@ import BasicMAPF.Instances.MAPF_Instance;
 import BasicMAPF.Instances.Maps.Coordinates.I_Coordinate;
 import BasicMAPF.Instances.Maps.Enum_MapLocationType;
 import BasicMAPF.Instances.Maps.I_Location;
+import BasicMAPF.Solvers.AStart_OD.MAPFUA_MA.MapfuaObjective;
 import BasicMAPF.Solvers.ConstraintsAndConflicts.A_Conflict;
 import BasicMAPF.Solvers.ConstraintsAndConflicts.Constraint.Constraint;
 import BasicMAPF.Solvers.ConstraintsAndConflicts.Constraint.GoalConstraint;
@@ -25,26 +26,32 @@ import java.util.Map;
 import java.util.PriorityQueue;
 
 /**
- * CBS* low-level search for one meta-agent under MAPFUA/MUA.
+ * CBS* low-level search for one meta-agent under MAPFUA.
  *
  * The paper's two-phase low level is adapted as follows: while constraints applicable to this meta-agent remain in the
  * future, duplicate keys include absolute time. Once no such constraint remains, absolute time is dropped, but the key
- * still contains the full joint configuration, transient target-visit history, and the moved-UA mask. This is safe for
- * MUA because future transition cost depends only on whether each UA has already moved, not on how many times it moved
- * or on the elapsed absolute time. UA agents are never forced back to their source; their only objective-relevant
- * terminal history is the moved-UA mask.
+ * still contains the full joint configuration, transient target-visit history, and the moved-UA mask. This is safe
+ * because future pure MUA/Fuel/SST transition costs depend only on the stored history and current positions, not on
+ * elapsed absolute time once all explicit future constraints are gone. UA agents are never forced back to their source.
  */
 public class CBSStarJointLowLevel {
     private final MAPF_Instance instance;
     private final TransientMAPFSettings transientSettings;
     private final Timeout timeout;
+    private final MapfuaObjective objective;
     private int generated;
     private int expanded;
 
     public CBSStarJointLowLevel(MAPF_Instance instance, TransientMAPFSettings transientSettings, Timeout timeout) {
+        this(instance, transientSettings, timeout, MapfuaObjective.MUA);
+    }
+
+    public CBSStarJointLowLevel(MAPF_Instance instance, TransientMAPFSettings transientSettings, Timeout timeout,
+                                MapfuaObjective objective) {
         this.instance = instance;
         this.transientSettings = transientSettings;
         this.timeout = timeout;
+        this.objective = objective;
     }
 
     public int generated() {
@@ -69,7 +76,6 @@ public class CBSStarJointLowLevel {
 
         PriorityQueue<Node> open = new PriorityQueue<>(Comparator
                 .comparingInt((Node node) -> node.g)
-                .thenComparingInt(node -> node.time)
                 .thenComparingLong(node -> node.id));
         Map<StateKey, Integer> bestG = new HashMap<>();
         generated = 0;
@@ -102,21 +108,26 @@ public class CBSStarJointLowLevel {
         for (I_Location[] next : successors) {
             boolean[] nextVisited = Arrays.copyOf(current.visitedTargets, current.visitedTargets.length);
             boolean[] nextMoved = Arrays.copyOf(current.movedUAs, current.movedUAs.length);
-            int stepCost = 0;
+            int newMovedUAs = 0;
+            int fuel = 0;
             Move[] moves = new Move[next.length];
+            int sst = unservedAssigned(current);
             for (int i = 0; i < next.length; i++) {
                 Agent agent = current.metaAgents.get(i);
                 moves[i] = new Move(agent, current.time + 1, current.positions[i], next[i]);
+                if (!current.positions[i].equals(next[i])) {
+                    fuel++;
+                }
                 if (next[i].getCoordinate().equals(agent.target)) {
                     nextVisited[i] = true;
                 }
                 if (agent.isUnassigned && !nextMoved[i] && !current.positions[i].equals(next[i])) {
                     nextMoved[i] = true;
-                    stepCost++;
+                    newMovedUAs++;
                 }
             }
             Node child = new Node(current.metaAgents, next, nextVisited, nextMoved, current.time + 1,
-                    current.g + stepCost, current, moves, generated++);
+                    current.g + (int) objective.stepCost(newMovedUAs, fuel, sst), current, moves, generated++);
             putIfBetter(child, hasFutureConstraint(current.metaAgents, child.time, constraints), bestG, open);
         }
     }
@@ -178,6 +189,15 @@ public class CBSStarJointLowLevel {
             }
         }
         return true;
+    }
+
+    private int unservedAssigned(Node node) {
+        int sst = 0;
+        for (int i = 0; i < node.metaAgents.size(); i++) {
+            Agent agent = node.metaAgents.get(i);
+            if (!agent.isUnassigned && !node.visitedTargets[i]) sst++;
+        }
+        return sst;
     }
 
     private boolean acceptsForever(Node node, I_ConstraintSet constraints) {

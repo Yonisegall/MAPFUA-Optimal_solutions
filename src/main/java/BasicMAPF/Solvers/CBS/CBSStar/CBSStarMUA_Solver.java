@@ -1,6 +1,5 @@
 package BasicMAPF.Solvers.CBS.CBSStar;
 
-import BasicMAPF.CostFunctions.SumMUA;
 import BasicMAPF.DataTypesAndStructures.Move;
 import BasicMAPF.DataTypesAndStructures.RunParameters;
 import BasicMAPF.DataTypesAndStructures.SingleAgentPlan;
@@ -9,12 +8,14 @@ import BasicMAPF.Instances.Agent;
 import BasicMAPF.Instances.MAPF_Instance;
 import BasicMAPF.Instances.Maps.Coordinates.I_Coordinate;
 import BasicMAPF.Instances.Maps.I_Location;
+import BasicMAPF.Solvers.AStart_OD.MAPFUA_MA.MapfuaObjective;
 import BasicMAPF.Solvers.A_Solver;
 import BasicMAPF.Solvers.ConstraintsAndConflicts.A_Conflict;
 import BasicMAPF.Solvers.ConstraintsAndConflicts.Constraint.Constraint;
 import BasicMAPF.Solvers.ConstraintsAndConflicts.Constraint.ConstraintSet;
 import Environment.Metrics.InstanceReport;
 import TransientMAPF.TransientMAPFSettings;
+import TransientMAPF.TransientMAPFSolution;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -25,7 +26,7 @@ import java.util.PriorityQueue;
 import java.util.Set;
 
 /**
- * CBS* for MAPFUA with exact MUA as the primary high-level objective.
+ * CBS* for MAPFUA with one selected pure high-level objective.
  *
  * Source-algorithm mapping:
  * root singleton meta-agents, DetectJointLoop before conflict validation on non-root nodes, loop-triggered merging of
@@ -35,12 +36,22 @@ import java.util.Set;
  * not impose a terminal target on UAs.
  */
 public class CBSStarMUA_Solver extends A_Solver {
+    private final MapfuaObjective objective;
     private PriorityQueue<CBSStarNode> open;
     private long nextNodeId;
 
     public CBSStarMUA_Solver() {
-        this.name = "CBSStarMUA";
-        this.configuredCostFunctionName = SumMUA.NAME;
+        this(MapfuaObjective.MUA);
+    }
+
+    public CBSStarMUA_Solver(MapfuaObjective objective) {
+        this.objective = objective;
+        this.name = switch (objective) {
+            case MUA -> "CBSStarMUA";
+            case FUEL -> "CBSStarFuel";
+            case SST -> "CBSStarSST";
+        };
+        this.configuredCostFunctionName = objective.reportName;
         this.transientMAPFSettings = TransientMAPFSettings.defaultTransientMAPF;
     }
 
@@ -50,7 +61,6 @@ public class CBSStarMUA_Solver extends A_Solver {
         this.transientMAPFSettings = TransientMAPFSettings.defaultTransientMAPF;
         this.open = new PriorityQueue<>(Comparator
                 .comparingInt((CBSStarNode node) -> node.cost)
-                .thenComparingInt(node -> node.depth)
                 .thenComparingLong(node -> node.id));
         this.nextNodeId = 0;
     }
@@ -102,7 +112,7 @@ public class CBSStarMUA_Solver extends A_Solver {
             putAll(solution, groupSolution);
             newest = metaAgent;
         }
-        return new CBSStarNode(rootConstraints, solution, partition, newest, solution.MUA(), 0, nextNodeId++, true);
+        return new CBSStarNode(rootConstraints, solution, partition, newest, objectiveValue(solution), 0, nextNodeId++, true);
     }
 
     private void addConflictChild(CBSStarNode parent, Constraint constraint, RunParameters parameters) {
@@ -113,7 +123,8 @@ public class CBSStarMUA_Solver extends A_Solver {
         Solution groupSolution = solveMetaAgent(replanned, childConstraints);
         if (groupSolution == null) return;
         putAll(childSolution, groupSolution);
-        CBSStarNode child = parent.childWith(constraint, childSolution, replanned, nextNodeId++);
+        CBSStarNode child = parent.childWith(constraint, childSolution, replanned,
+                objectiveValue(childSolution), nextNodeId++);
         open.add(child);
         generatedNodes++;
     }
@@ -148,14 +159,15 @@ public class CBSStarMUA_Solver extends A_Solver {
         if (!internalConflictFree(groupSolution)) {
             throw new IllegalStateException("CBS* joint low-level returned an internally conflicting meta-agent path.");
         }
-        CBSStarNode child = node.withMerge(mergedPartition, merged, mergedSolution, nextNodeId++);
+        CBSStarNode child = node.withMerge(mergedPartition, merged, mergedSolution,
+                objectiveValue(mergedSolution), nextNodeId++);
         open.add(child);
         generatedNodes++;
     }
 
     private Solution solveMetaAgent(MetaAgent metaAgent, ConstraintSet constraints) {
         long lowLevelStart = System.currentTimeMillis();
-        CBSStarJointLowLevel lowLevel = new CBSStarJointLowLevel(instance, transientMAPFSettings, getTimeout());
+        CBSStarJointLowLevel lowLevel = new CBSStarJointLowLevel(instance, transientMAPFSettings, getTimeout(), objective);
         Solution solution = lowLevel.solve(metaAgent, constraints);
         totalLowLevelCalls++;
         totalLowLevelNodesGenerated += lowLevel.generated();
@@ -265,7 +277,7 @@ public class CBSStarMUA_Solver extends A_Solver {
     }
 
     private Solution normalizeFinalSolution(Solution solution) {
-        Solution normalized = new Solution();
+        Solution normalized = new TransientMAPFSolution();
         for (SingleAgentPlan plan : solution) {
             if (plan.agent.isUnassigned) {
                 normalized.putPlan(trimTrailingWaits(plan));
@@ -302,9 +314,17 @@ public class CBSStarMUA_Solver extends A_Solver {
     protected void writeMetricsToReport(Solution solution) {
         super.writeMetricsToReport(solution);
         if (instanceReport != null && solution != null) {
-            instanceReport.putFloatValue(InstanceReport.StandardFields.solutionCost, solution.MUA());
-            instanceReport.putStringValue(InstanceReport.StandardFields.solutionCostFunction, SumMUA.NAME);
+            instanceReport.putFloatValue(InstanceReport.StandardFields.solutionCost, objectiveValue(solution));
+            instanceReport.putStringValue(InstanceReport.StandardFields.solutionCostFunction, objective.reportName);
         }
+    }
+
+    int objectiveValue(Solution solution) {
+        return switch (objective) {
+            case MUA -> solution.MUA();
+            case FUEL -> solution.FUEL();
+            case SST -> solution.SST();
+        };
     }
 
     @Override
