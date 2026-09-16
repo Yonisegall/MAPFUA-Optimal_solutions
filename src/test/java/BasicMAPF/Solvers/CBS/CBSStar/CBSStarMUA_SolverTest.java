@@ -19,7 +19,9 @@ import Environment.Metrics.InstanceReport;
 import Environment.Metrics.Metrics;
 import org.junit.jupiter.api.Test;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -144,6 +146,36 @@ class CBSStarMUA_SolverTest {
             assertNotNull(astar, astarName);
             assertCBSStarMAPFUASolution(instance, cbs);
             assertEquals(objectiveValue(cbsName, astar), objectiveValue(cbsName, cbs), cbsName);
+        }
+    }
+
+    @Test
+    void cbsStarAndAStarODZeroAgreeOnMUAAcrossSmallInstancesWheneverBothSolve() {
+        Map<String, Integer> instancesToAgentCounts = new LinkedHashMap<>();
+        instancesToAgentCounts.put("cbs_star_side_pocket", 3);
+        instancesToAgentCounts.put("mapfua_ma_no_ua_move", 2);
+        instancesToAgentCounts.put("mapfua_ma_return_ua", 2);
+        instancesToAgentCounts.put("two_vertex_swap", 2);
+        // included even though it is a known stress case for CBS*'s paper-faithful merge mechanism (see
+        // CBSStarDoubleSidePocketStressTest): "whenever both solve" naturally skips it if CBS* times out.
+        instancesToAgentCounts.put("cbs_star_double_side_pocket", 6);
+
+        for (Map.Entry<String, Integer> entry : instancesToAgentCounts.entrySet()) {
+            String instanceName = entry.getKey();
+            MAPF_Instance instance = loadArbitrary(instanceName, entry.getValue());
+
+            Solution cbsSolution = CanonicalSolversFactory.createSolver(CanonicalSolversFactory.CBS_STAR_MUA_NAME)
+                    .solve(instance, new RunParametersBuilder().setTimeout(10_000).setInstanceReport(Metrics.newInstanceReport()).createRP());
+            Solution aStarSolution = CanonicalSolversFactory.createSolver(CanonicalSolversFactory.ASTAR_OD_MUA_ZERO_NAME)
+                    .solve(instance, new RunParametersBuilder().setTimeout(10_000).setInstanceReport(Metrics.newInstanceReport()).createRP());
+
+            if (cbsSolution != null && aStarSolution != null) {
+                assertEquals(aStarSolution.MUA(), cbsSolution.MUA(),
+                        instanceName + ": CBSStarMUA and AStarODMUAZero must agree on optimal MUA when both solve");
+            } else {
+                System.out.println("[cross-check] skipping " + instanceName + " (cbsSolved="
+                        + (cbsSolution != null) + ", aStarZeroSolved=" + (aStarSolution != null) + ")");
+            }
         }
     }
 

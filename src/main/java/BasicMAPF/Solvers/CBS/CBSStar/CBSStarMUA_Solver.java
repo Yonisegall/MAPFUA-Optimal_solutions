@@ -36,9 +36,30 @@ import java.util.Set;
  * not impose a terminal target on UAs.
  */
 public class CBSStarMUA_Solver extends A_Solver {
+    public static final String METRIC_CONFLICTS_TOTAL = "CBSStar_conflicts_total";
+    public static final String METRIC_CONFLICTS_AA_AA = "CBSStar_conflicts_aa_aa";
+    public static final String METRIC_CONFLICTS_AA_UA = "CBSStar_conflicts_aa_ua";
+    public static final String METRIC_CONFLICTS_UA_UA = "CBSStar_conflicts_ua_ua";
+    public static final String METRIC_DUPLICATE_DETECTIONS = "CBSStar_duplicate_detections";
+    public static final String METRIC_DUPLICATE_PRUNED = "CBSStar_duplicate_pruned";
+    public static final String METRIC_META_AGENT_CREATIONS = "CBSStar_meta_agent_creations";
+    public static final String METRIC_MAX_META_AGENT_SIZE = "CBSStar_max_meta_agent_size";
+    public static final String METRIC_META_AGENT_LL_CALLS = "CBSStar_meta_agent_ll_calls";
+    public static final String METRIC_PEAK_OPEN_SIZE = "CBSStar_peak_open_size";
+
     private final MapfuaObjective objective;
     private PriorityQueue<CBSStarNode> open;
     private long nextNodeId;
+    private int conflictsTotal;
+    private int conflictsAaAa;
+    private int conflictsAaUa;
+    private int conflictsUaUa;
+    private int duplicateDetections;
+    private int duplicatePruned;
+    private int metaAgentCreations;
+    private int maxMetaAgentSize;
+    private int metaAgentLowLevelCalls;
+    private int peakOpenSize;
 
     public CBSStarMUA_Solver() {
         this(MapfuaObjective.MUA);
@@ -63,13 +84,23 @@ public class CBSStarMUA_Solver extends A_Solver {
                 .comparingInt((CBSStarNode node) -> node.cost)
                 .thenComparingLong(node -> node.id));
         this.nextNodeId = 0;
+        this.conflictsTotal = 0;
+        this.conflictsAaAa = 0;
+        this.conflictsAaUa = 0;
+        this.conflictsUaUa = 0;
+        this.duplicateDetections = 0;
+        this.duplicatePruned = 0;
+        this.metaAgentCreations = 0;
+        this.maxMetaAgentSize = 0;
+        this.metaAgentLowLevelCalls = 0;
+        this.peakOpenSize = 0;
     }
 
     @Override
     protected Solution runAlgorithm(MAPF_Instance instance, RunParameters parameters) {
         CBSStarNode root = generateRoot(instance, parameters);
         if (root == null) return null;
-        open.add(root);
+        addToOpen(root);
         generatedNodes++;
 
         while (!open.isEmpty()) {
@@ -79,6 +110,7 @@ public class CBSStarMUA_Solver extends A_Solver {
 
             Set<MetaAgent> loop = node.root ? Set.of() : detectJointLoop(node);
             if (!loop.isEmpty()) {
+                duplicateDetections++;
                 handleLoopMerge(node, loop, parameters);
                 continue;
             }
@@ -93,6 +125,7 @@ public class CBSStarMUA_Solver extends A_Solver {
                 return finalSolution;
             }
 
+            countConflict(conflict);
             for (Constraint constraint : conflict.getPreventingConstraints()) {
                 addConflictChild(node, constraint, parameters);
             }
@@ -102,6 +135,9 @@ public class CBSStarMUA_Solver extends A_Solver {
 
     private CBSStarNode generateRoot(MAPF_Instance instance, RunParameters parameters) {
         MetaAgentPartition partition = MetaAgentPartition.singletonPartition(instance.agents);
+        for (MetaAgent metaAgent : partition.metaAgents()) {
+            updateMaxMetaAgentSize(metaAgent);
+        }
         ConstraintSet rootConstraints = new ConstraintSet();
         if (parameters.constraints != null) rootConstraints.addAll(parameters.constraints);
         Solution solution = new Solution();
@@ -125,7 +161,7 @@ public class CBSStarMUA_Solver extends A_Solver {
         putAll(childSolution, groupSolution);
         CBSStarNode child = parent.childWith(constraint, childSolution, replanned,
                 objectiveValue(childSolution), nextNodeId++);
-        open.add(child);
+        addToOpen(child);
         generatedNodes++;
     }
 
@@ -135,6 +171,7 @@ public class CBSStarMUA_Solver extends A_Solver {
         ConstraintSet relevant = relevantConstraints(node.constraints, merged.agents());
         Solution groupSolution = solveMetaAgent(merged, relevant);
         if (groupSolution == null) {
+            duplicatePruned++;
             if (relevant.isEmpty()) {
                 open.clear();
                 return;
@@ -146,6 +183,8 @@ public class CBSStarMUA_Solver extends A_Solver {
             return;
         }
 
+        metaAgentCreations++;
+        updateMaxMetaAgentSize(merged);
         Solution mergedSolution = new Solution(node.solution);
         for (MetaAgent old : loop) {
             for (Agent agent : old.agents()) {
@@ -161,11 +200,13 @@ public class CBSStarMUA_Solver extends A_Solver {
         }
         CBSStarNode child = node.withMerge(mergedPartition, merged, mergedSolution,
                 objectiveValue(mergedSolution), nextNodeId++);
-        open.add(child);
+        addToOpen(child);
         generatedNodes++;
     }
 
     private Solution solveMetaAgent(MetaAgent metaAgent, ConstraintSet constraints) {
+        updateMaxMetaAgentSize(metaAgent);
+        if (metaAgent.size() > 1) metaAgentLowLevelCalls++;
         long lowLevelStart = System.currentTimeMillis();
         CBSStarJointLowLevel lowLevel = new CBSStarJointLowLevel(instance, transientMAPFSettings, getTimeout(), objective);
         Solution solution = lowLevel.solve(metaAgent, constraints);
@@ -174,6 +215,30 @@ public class CBSStarMUA_Solver extends A_Solver {
         totalLowLevelNodesExpanded += lowLevel.expanded();
         totalLowLevelTimeMS += (int) (System.currentTimeMillis() - lowLevelStart);
         return solution;
+    }
+
+    private void addToOpen(CBSStarNode node) {
+        open.add(node);
+        if (open.size() > peakOpenSize) peakOpenSize = open.size();
+    }
+
+    private void countConflict(A_Conflict conflict) {
+        conflictsTotal++;
+        boolean ua1 = conflict.agent1.isUnassigned;
+        boolean ua2 = conflict.agent2.isUnassigned;
+        if (ua1 && ua2) {
+            conflictsUaUa++;
+        } else if (ua1 || ua2) {
+            conflictsAaUa++;
+        } else {
+            conflictsAaAa++;
+        }
+    }
+
+    private void updateMaxMetaAgentSize(MetaAgent metaAgent) {
+        if (metaAgent != null && metaAgent.size() > maxMetaAgentSize) {
+            maxMetaAgentSize = metaAgent.size();
+        }
     }
 
     private ConstraintSet relevantConstraints(ConstraintSet constraints, Collection<Agent> agents) {
@@ -313,10 +378,42 @@ public class CBSStarMUA_Solver extends A_Solver {
     @Override
     protected void writeMetricsToReport(Solution solution) {
         super.writeMetricsToReport(solution);
-        if (instanceReport != null && solution != null) {
-            instanceReport.putFloatValue(InstanceReport.StandardFields.solutionCost, objectiveValue(solution));
+        if (instanceReport != null) {
+            // super.writeMetricsToReport() infers the cost function from the solver/class name, and "CBSStar"
+            // itself contains the substring "SST" (CB[SST]AR), so that inference always misfires for this solver
+            // family. Always overwrite it with the actual configured objective, independent of solved/unsolved
+            // status, rather than only correcting it when a solution is found.
             instanceReport.putStringValue(InstanceReport.StandardFields.solutionCostFunction, objective.reportName);
+            if (solution != null) {
+                assert solution.MUA() == independentlyCountMovedUAs(solution) :
+                        "Reported MUA does not match the number of distinct moved UAs";
+                instanceReport.putFloatValue(InstanceReport.StandardFields.solutionCost, objectiveValue(solution));
+            }
+            instanceReport.putIntegerValue(METRIC_CONFLICTS_TOTAL, conflictsTotal);
+            instanceReport.putIntegerValue(METRIC_CONFLICTS_AA_AA, conflictsAaAa);
+            instanceReport.putIntegerValue(METRIC_CONFLICTS_AA_UA, conflictsAaUa);
+            instanceReport.putIntegerValue(METRIC_CONFLICTS_UA_UA, conflictsUaUa);
+            instanceReport.putIntegerValue(METRIC_DUPLICATE_DETECTIONS, duplicateDetections);
+            instanceReport.putIntegerValue(METRIC_DUPLICATE_PRUNED, duplicatePruned);
+            instanceReport.putIntegerValue(METRIC_META_AGENT_CREATIONS, metaAgentCreations);
+            instanceReport.putIntegerValue(METRIC_MAX_META_AGENT_SIZE, maxMetaAgentSize);
+            instanceReport.putIntegerValue(METRIC_META_AGENT_LL_CALLS, metaAgentLowLevelCalls);
+            instanceReport.putIntegerValue(METRIC_PEAK_OPEN_SIZE, peakOpenSize);
         }
+    }
+
+    private int independentlyCountMovedUAs(Solution solution) {
+        int moved = 0;
+        for (SingleAgentPlan plan : solution) {
+            if (!plan.agent.isUnassigned) continue;
+            for (Move move : plan) {
+                if (!move.prevLocation.equals(move.currLocation)) {
+                    moved++;
+                    break;
+                }
+            }
+        }
+        return moved;
     }
 
     int objectiveValue(Solution solution) {

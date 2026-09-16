@@ -16,6 +16,7 @@ import BasicMAPF.CostFunctions.SumOfCosts;
 import BasicMAPF.CostFunctions.SumServiceTimes;
 import BasicMAPF.Instances.InstanceManager;
 import BasicMAPF.Instances.MAPF_Instance;
+import BasicMAPF.Solvers.CBS.CBSStar.CBSStarMUA_Solver;
 import BasicMAPF.Solvers.I_Solver;
 import Environment.Experiment;
 import Environment.IO_Package.IO_Manager;
@@ -110,6 +111,7 @@ public abstract class A_RunManager {
                     InstanceReport.StandardFields.mapName,
                     InstanceReport.StandardFields.instanceName,
                     InstanceReport.StandardFields.numAgents,
+                    InstanceReport.StandardFields.numTraversableLocations,
                     InstanceReport.StandardFields.elapsedTimeMS,
                     InstanceReport.StandardFields.timeoutThresholdMS,
                     InstanceReport.StandardFields.solved,
@@ -121,8 +123,7 @@ public abstract class A_RunManager {
                     Makespan.NAME,
                     SumServiceTimes.NAME,
                     MakespanServiceTime.NAME,
-                    MakespanServiceTime.NAME,
-                    SumFuel.NAME,  
+                    SumFuel.NAME,
                     SumMUA.NAME,   
                     InstanceReport.StandardFields.expandedNodes,
                     InstanceReport.StandardFields.expansionRate,
@@ -132,6 +133,19 @@ public abstract class A_RunManager {
                     InstanceReport.StandardFields.expansionRateLowLevel,
                     InstanceReport.StandardFields.generatedNodesLowLevel,
                     InstanceReport.StandardFields.generationRateLowLevel,
+                    InstanceReport.StandardFields.totalLowLevelCalls,
+                    InstanceReport.StandardFields.totalLowLevelTimeMS,
+
+                    CBSStarMUA_Solver.METRIC_CONFLICTS_TOTAL,
+                    CBSStarMUA_Solver.METRIC_CONFLICTS_AA_AA,
+                    CBSStarMUA_Solver.METRIC_CONFLICTS_AA_UA,
+                    CBSStarMUA_Solver.METRIC_CONFLICTS_UA_UA,
+                    CBSStarMUA_Solver.METRIC_DUPLICATE_DETECTIONS,
+                    CBSStarMUA_Solver.METRIC_DUPLICATE_PRUNED,
+                    CBSStarMUA_Solver.METRIC_META_AGENT_CREATIONS,
+                    CBSStarMUA_Solver.METRIC_MAX_META_AGENT_SIZE,
+                    CBSStarMUA_Solver.METRIC_META_AGENT_LL_CALLS,
+                    CBSStarMUA_Solver.METRIC_PEAK_OPEN_SIZE,
 
                     /////////////////////////////////////////////////////////////
                     "runtimeSeconds",

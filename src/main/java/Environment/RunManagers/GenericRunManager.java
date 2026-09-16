@@ -57,7 +57,7 @@ public class GenericRunManager extends A_RunManager {
         // super.solvers.add(CanonicalSolversFactory.createCBS_UA_SST_Solver());           // SST
         // super.solvers.add(CanonicalSolversFactory.createCBS_UA_Fuel_Solver());          // Fuel
         // super.solvers.add(CanonicalSolversFactory.createCBS_UA_MUA_Solver());           // MUA (Pure CBS)
-        // super.solvers.add(CanonicalSolversFactory.createCBSStarMUASolver());  // PURE MUA | CBS*
+        super.solvers.add(CanonicalSolversFactory.createCBSStarMUASolver());  // PURE MUA | CBS*
         // super.solvers.add(CanonicalSolversFactory.createCBSStarFuelSolver()); // PURE FUEL | CBS*
         // super.solvers.add(CanonicalSolversFactory.createCBSStarSSTSolver());  // PURE SST | CBS*
 

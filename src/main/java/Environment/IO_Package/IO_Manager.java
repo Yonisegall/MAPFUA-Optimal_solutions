@@ -6,7 +6,7 @@ import java.util.HashSet;
 
 public class IO_Manager { // Singleton class
 
-    private HashSet<String> openedPaths; // Keeps track on opened files
+    private final java.util.Set<String> openedPaths; // Keeps track on opened files; concurrent test classes may touch this from multiple threads
     public static final String pathSeparator = System.getProperty("file.separator");
     public static final String workingDirectory = buildPath(new String[]{System.getProperty("user.dir"), "src"});; // absolute path to src
     public static final String testResources_Directory = buildPath(new String[]{workingDirectory, "test", "resources"});
@@ -21,11 +21,14 @@ public class IO_Manager { // Singleton class
     }
 
     private IO_Manager() {
-        this.openedPaths = new HashSet<String>();
+        this.openedPaths = java.util.Collections.synchronizedSet(new HashSet<String>());
     }
 
 
-    // Tries to add path to the openedPaths list
+    // Tries to add path to the openedPaths list.
+    // A single Set#add call is atomic under the synchronized wrapper, so this doubles as the
+    // check-and-mark-open operation; callers must not separately call isOpen() beforehand, or the
+    // check and the add race across threads (test classes may run concurrently, see junit-platform.properties).
     // Return true if added successfully , otherwise false
     public boolean addOpenPath(String path){
         return this.openedPaths.add(path);

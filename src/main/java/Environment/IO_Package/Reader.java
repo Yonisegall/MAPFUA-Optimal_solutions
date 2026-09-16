@@ -62,9 +62,11 @@ public class Reader {
             this.scanner = new Scanner(this.file);
             // Means scanner created successfully
             if ( this.scanner != null ){
-                // Check if file is open in list
-                if( this.io_manager.isOpen(this.file.getPath()) ){ return Enum_IO.CURRENT_FILE_STILL_OPEN; }
+                // addOpenPath atomically checks-and-marks the path as open; a separate isOpen() check
+                // beforehand would race against other threads opening the same path concurrently
+                // (test classes may run concurrently, see junit-platform.properties).
                 if( this.io_manager.addOpenPath(this.file.getPath()) ){ return Enum_IO.OPENED; }
+                return Enum_IO.CURRENT_FILE_STILL_OPEN;
             }
 
         } catch (FileNotFoundException exception){

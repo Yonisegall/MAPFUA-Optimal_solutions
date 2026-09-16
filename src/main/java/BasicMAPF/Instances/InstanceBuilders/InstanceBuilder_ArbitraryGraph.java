@@ -108,6 +108,7 @@ public class InstanceBuilder_ArbitraryGraph implements I_InstanceBuilder{
             nextLine = reader.getNextLine();
         }
 
+        reader.closeFile();
         return MapFactory.newArbitraryGraphMap(coordinatesAdjacencyLists, coordinatesEdgeWeights,
                 coordinatesLocationType, true, coordinatesLocationSubtypes);
     }
