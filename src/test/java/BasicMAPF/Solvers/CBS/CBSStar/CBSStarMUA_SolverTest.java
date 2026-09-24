@@ -179,6 +179,120 @@ class CBSStarMUA_SolverTest {
         }
     }
 
+    @Test
+    void transientAgentMayLeaveTargetSoAnotherAgentCanVisitIt() {
+        // Regression for the CBS*/MAPFUA transient-goal false-UNSAT bug: X -- Y -- Z, a0 targets Y from the left,
+        // a1 targets Y from the right. No UAs are involved. The only joint solutions require one agent to visit Y
+        // and then vacate it so the other agent can visit Y afterward - e.g. a0: X->Y->X, a1: Z->Z->Y. Trimming a0's
+        // plan down to "X->Y" (its first target visit) and then re-checking under classical stay-forever conflict
+        // semantics falsely turns this valid solution into an apparent conflict at Y.
+        MAPF_Instance instance = sharedTargetLineInstance();
+        Agent a0 = instance.agents.get(0);
+        Agent a1 = instance.agents.get(1);
+
+        Solution cbsSolution = CanonicalSolversFactory.createCBSStarMUASolver().solve(instance,
+                new RunParametersBuilder().setTimeout(10_000).setInstanceReport(Metrics.newInstanceReport()).createRP());
+        Solution aStarSolution = CanonicalSolversFactory.createSolver(CanonicalSolversFactory.ASTAR_OD_MUA_ZERO_NAME)
+                .solve(instance, new RunParametersBuilder().setTimeout(10_000).setInstanceReport(Metrics.newInstanceReport()).createRP());
+
+        // 1. CBSStarMUA returns non-null: this instance IS solvable under transient MAPFUA goal semantics.
+        assertNotNull(cbsSolution, "CBSStarMUA must solve X-Y-Z with both AAs targeting the shared middle vertex; "
+                + "it is solvable under transient (visit-once, may-leave-afterward) goal semantics");
+
+        // 2. Returned solution is valid under transient MAPF semantics (conflict-free; each AA's target only needs
+        // to be visited at some point, not to be the plan's final position).
+        assertTrue(cbsSolution.solves(instance), "returned solution must be conflict-free and satisfy every "
+                + "agent's source/target under transient semantics");
+
+        // 3. Both assigned agents visit Y.
+        assertTrue(visitsTarget(cbsSolution.getPlanFor(a0)), "a0 must visit its target Y");
+        assertTrue(visitsTarget(cbsSolution.getPlanFor(a1)), "a1 must visit its target Y");
+
+        // 4. MUA == 0: there are no UAs in this instance, and AAs never contribute to MUA no matter how much they move.
+        assertEquals(0, cbsSolution.MUA());
+
+        // 5. At least one agent must have a real move after first visiting its target - that escape move is exactly
+        // what keeps the joint solution conflict-free (both agents cannot occupy Y at the same time forever).
+        assertTrue(hasPostTargetMove(cbsSolution.getPlanFor(a0)) || hasPostTargetMove(cbsSolution.getPlanFor(a1)),
+                "at least one AA must move again after first visiting Y, or the two AAs would collide at Y forever");
+
+        // 6. CBSStarMUA and AStarODMUAZero agree.
+        assertNotNull(aStarSolution, "AStarODMUAZero must also solve this instance");
+        assertEquals(0, aStarSolution.MUA());
+        assertEquals(aStarSolution.MUA(), cbsSolution.MUA());
+    }
+
+    @Test
+    void transientAgentVacatesHubSoASecondAgentCanPassThrough() {
+        // Second, non-symmetric transient-goal regression: a branching star (hub B with three spokes A, C, D; D is
+        // otherwise unused) instead of a plain line. a0 goes A->B and a1 goes C->B: both target the same hub node,
+        // so whichever agent arrives first must eventually vacate B so the other agent can also visit it (neither
+        // can just "wait its turn" indefinitely, exactly as in the X-Y-Z case) - but here on a degree-3 branching
+        // topology instead of a 3-node path, so this exercises the same semantic fix without being a symmetric
+        // clone of the first regression.
+        MAPF_Instance instance = sharedTargetHubInstance();
+        Agent a0 = instance.agents.get(0);
+        Agent a1 = instance.agents.get(1);
+
+        Solution cbsSolution = CanonicalSolversFactory.createCBSStarMUASolver().solve(instance,
+                new RunParametersBuilder().setTimeout(10_000).setInstanceReport(Metrics.newInstanceReport()).createRP());
+        Solution aStarSolution = CanonicalSolversFactory.createSolver(CanonicalSolversFactory.ASTAR_OD_MUA_ZERO_NAME)
+                .solve(instance, new RunParametersBuilder().setTimeout(10_000).setInstanceReport(Metrics.newInstanceReport()).createRP());
+
+        assertNotNull(cbsSolution, "CBSStarMUA must solve this instance: a0 and a1 share target hub B, so it is "
+                + "solvable under transient goal semantics (visit-once, may-leave-afterward)");
+        assertTrue(cbsSolution.solves(instance));
+        assertTrue(visitsTarget(cbsSolution.getPlanFor(a0)), "a0 must visit its target B");
+        assertTrue(visitsTarget(cbsSolution.getPlanFor(a1)), "a1 must visit its target B");
+        assertEquals(0, cbsSolution.MUA());
+        assertTrue(hasPostTargetMove(cbsSolution.getPlanFor(a0)) || hasPostTargetMove(cbsSolution.getPlanFor(a1)),
+                "at least one AA must move again after first visiting B, or the two AAs would collide at B forever");
+
+        assertNotNull(aStarSolution, "AStarODMUAZero must also solve this instance");
+        assertEquals(0, aStarSolution.MUA());
+        assertEquals(aStarSolution.MUA(), cbsSolution.MUA());
+    }
+
+    private MAPF_Instance sharedTargetLineInstance() {
+        MAPF_Instance instance = loadArbitrary("cbs_star_shared_target_line", 2);
+        assertNotNull(instance);
+        return instance;
+    }
+
+    private MAPF_Instance sharedTargetHubInstance() {
+        MAPF_Instance instance = loadArbitrary("cbs_star_shared_target_hub", 2);
+        assertNotNull(instance);
+        return instance;
+    }
+
+    private boolean visitsTarget(SingleAgentPlan plan) {
+        for (Move move : plan) {
+            if (move.prevLocation.getCoordinate().equals(plan.agent.target)
+                    || move.currLocation.getCoordinate().equals(plan.agent.target)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * @return true if the plan contains a real move (not a wait) strictly after the first time the agent visits
+     * its target.
+     */
+    private boolean hasPostTargetMove(SingleAgentPlan plan) {
+        boolean visited = false;
+        for (Move move : plan) {
+            if (visited && !move.prevLocation.equals(move.currLocation)) {
+                return true;
+            }
+            if (move.prevLocation.getCoordinate().equals(plan.agent.target)
+                    || move.currLocation.getCoordinate().equals(plan.agent.target)) {
+                visited = true;
+            }
+        }
+        return false;
+    }
+
     private MAPF_Instance sidePocketInstance() {
         if (cachedSidePocket != null) return cachedSidePocket;
         MAPF_Instance instance = loadArbitrary("cbs_star_side_pocket", 3);

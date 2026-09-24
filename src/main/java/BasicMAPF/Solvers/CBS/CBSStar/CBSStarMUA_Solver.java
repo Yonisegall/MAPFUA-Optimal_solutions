@@ -118,9 +118,9 @@ public class CBSStarMUA_Solver extends A_Solver {
             A_Conflict conflict = node.solution.firstConflict(false, false);
             if (conflict == null) {
                 Solution finalSolution = normalizeFinalSolution(node.solution);
-                if (finalSolution.firstConflict(false, false) != null) {
-                    continue;
-                }
+                assert finalSolution.firstConflict(false, false) == null :
+                        "normalizeFinalSolution changed a validated candidate's occupancy and introduced a "
+                                + "conflict that node.solution did not have";
                 runtimeToFirstSolution = (int) (System.currentTimeMillis() - startDate);
                 return finalSolution;
             }
@@ -341,27 +341,28 @@ public class CBSStarMUA_Solver extends A_Solver {
         return false;
     }
 
+    /**
+     * Converts the validated candidate into a {@link TransientMAPFSolution} (so downstream target-achievement
+     * checks use visit-once semantics) without changing any agent's occupancy trace. UA plans may have their
+     * trailing wait moves dropped: a UA's final resting location is identical whether or not those waits are
+     * spelled out, so this cannot change conflict/occupancy behavior. AA plans are copied as returned by the low
+     * level. AAs are satisfied the moment they first visit their target ("reach goal once" semantics: see
+     * CBSStarJointLowLevel's isGoal/acceptsForever), but may still need to move again afterward to avoid a real
+     * collision with another agent, e.g. to vacate the target cell it just visited. Trimming an AA's plan down to
+     * its first target visit would silently discard such a necessary move, and then the classical
+     * stay-at-last-position conflict check (SingleAgentPlan.firstConflictAtGoal) would treat the vacated cell as
+     * permanently occupied - producing a false conflict for a solution that was already validated as conflict-free.
+     */
     private Solution normalizeFinalSolution(Solution solution) {
         Solution normalized = new TransientMAPFSolution();
         for (SingleAgentPlan plan : solution) {
             if (plan.agent.isUnassigned) {
                 normalized.putPlan(trimTrailingWaits(plan));
             } else {
-                normalized.putPlan(trimAfterFirstTargetVisit(plan));
+                normalized.putPlan(new SingleAgentPlan(plan));
             }
         }
         return normalized;
-    }
-
-    private SingleAgentPlan trimAfterFirstTargetVisit(SingleAgentPlan plan) {
-        ArrayList<Move> moves = new ArrayList<>();
-        for (Move move : plan) {
-            moves.add(move);
-            if (move.currLocation.getCoordinate().equals(plan.agent.target)) {
-                break;
-            }
-        }
-        return new SingleAgentPlan(plan.agent, moves);
     }
 
     private SingleAgentPlan trimTrailingWaits(SingleAgentPlan plan) {
