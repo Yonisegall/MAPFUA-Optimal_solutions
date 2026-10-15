@@ -1,0 +1,8 @@
+version 1
+0	grid-5x5-open.map	5	5	4	4	4	0	4.00000000
+1	grid-5x5-open.map	5	5	3	4	0	2	3.60555128
+2	grid-5x5-open.map	5	5	4	0	1	2	3.60555128
+3	grid-5x5-open.map	5	5	4	1	0	0	4.12310563
+4	grid-5x5-open.map	5	5	1	2	0	4	2.23606798
+5	grid-5x5-open.map	5	5	1	1	2	1	1.00000000
+6	grid-5x5-open.map	5	5	3	2	3	2	0.00000000

@@ -90,6 +90,10 @@ submit_mapf_job.py
 .nfs00000000a08bf04f00003009
 results.csv
 
-/Experiments
-
 /src/test/resources
+
+Experiments/MUA/table_5x5/results/
+Experiments/MUA/table_5x5/output/
+Experiments/MUA/.runner_tmp/
+Experiments/MUA/**/__pycache__/
+Experiments/MUA/**/*.pyc

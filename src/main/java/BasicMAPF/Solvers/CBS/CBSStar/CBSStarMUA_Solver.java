@@ -99,7 +99,15 @@ public class CBSStarMUA_Solver extends A_Solver {
     @Override
     protected Solution runAlgorithm(MAPF_Instance instance, RunParameters parameters) {
         CBSStarNode root = generateRoot(instance, parameters);
-        if (root == null) return null;
+        if (root == null) {
+            // The root's low-level solves share this solver's Timeout instance (see solveMetaAgent), so a null
+            // root can mean either a genuinely unsolvable singleton meta-agent or that the shared deadline was
+            // hit inside that nested search before the top-level loop ever got to check it itself. checkTimeout()
+            // only records which of the two happened (Solved is already false either way); it makes no search
+            // decision and changes no result.
+            checkTimeout();
+            return null;
+        }
         addToOpen(root);
         generatedNodes++;
 
@@ -130,6 +138,12 @@ public class CBSStarMUA_Solver extends A_Solver {
                 addConflictChild(node, constraint, parameters);
             }
         }
+        // open can also empty out because every remaining branch's low-level replan (addConflictChild) or
+        // merge attempt (handleLoopMerge, which may explicitly open.clear()) returned null - which itself can
+        // mean either genuine infeasibility or that the shared deadline expired inside that nested call, one
+        // poll too late for the top-of-loop checkTimeout() above to have caught it. Record which one actually
+        // happened before reporting Solved=0; this does not change that a solution was not found.
+        checkTimeout();
         return null;
     }
 

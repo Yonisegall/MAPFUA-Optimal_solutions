@@ -51,50 +51,51 @@ public class GenericRunManager extends A_RunManager {
             return;
         }
 
-//───────────────────────────────────────────── Dynamic UA ─────────────────────────────────────────────
+//  ───────────────────────────────────────────── Dynamic UA ─────────────────────────────────────────────
 
         // CBS:
-        // super.solvers.add(CanonicalSolversFactory.createCBS_UA_SST_Solver());           // SST
-        // super.solvers.add(CanonicalSolversFactory.createCBS_UA_Fuel_Solver());          // Fuel
-        // super.solvers.add(CanonicalSolversFactory.createCBS_UA_MUA_Solver());           // MUA (Pure CBS)
-        super.solvers.add(CanonicalSolversFactory.createCBSStarMUASolver());  // PURE MUA | CBS*
-        // super.solvers.add(CanonicalSolversFactory.createCBSStarFuelSolver()); // PURE FUEL | CBS*
-        // super.solvers.add(CanonicalSolversFactory.createCBSStarSSTSolver());  // PURE SST | CBS*
+        // super.solvers.add(CanonicalSolversFactory.createCBS_UA_SST_Solver());    // SST
+        // super.solvers.add(CanonicalSolversFactory.createCBS_UA_Fuel_Solver());   // Fuel
+        // super.solvers.add(CanonicalSolversFactory.createCBS_UA_MUA_Solver());    // MUA (Pure CBS)
 
-        // super.solvers.add(CanonicalSolversFactory.createMinMUACBSSolver());             // MUA (CBS with ID-LaCAM)
-        // super.solvers.add(CanonicalSolversFactory.createCBS_UA_SST_ALL_Solver());       // SST All
-        // super.solvers.add(CanonicalSolversFactory.createCBS_UA_Fuel_Assigned_Solver()); // FUEL Assigned
+        // CBS*:
+        super.solvers.add(CanonicalSolversFactory.createCBSStarMUASolver());      // PURE MUA | CBS*
+        // super.solvers.add(CanonicalSolversFactory.createCBSStarFuelSolver());  // PURE FUEL | CBS*
+        // super.solvers.add(CanonicalSolversFactory.createCBSStarSSTSolver());   // PURE SST | CBS*
 
+        // CBS with ID-LaCAM:
+        // super.solvers.add(CanonicalSolversFactory.createMinMUACBSSolver());              // MUA (CBS with ID-LaCAM)
+        // super.solvers.add(CanonicalSolversFactory.createCBS_UA_SST_ALL_Solver());        // SST All
+        // super.solvers.add(CanonicalSolversFactory.createCBS_UA_Fuel_Assigned_Solver());  // FUEL Assigned
+ 
         // A*+OD:
         // super.solvers.add(CanonicalSolversFactory.createAStartOD_UA_SST_Solver());      // SST
         // super.solvers.add(CanonicalSolversFactory.createAStartOD_UA_Fuel_Solver());     // Fuel
         // super.solvers.add(CanonicalSolversFactory.createAStarOD_UA_MUA_Solver());       // MUA (AStar + OD)
         // super.solvers.add(CanonicalSolversFactory.createAStarODLaCAM_UA_MUA_Solver());  // MUA (LaCAM + AStar + OD)
+
         // A*OD - PURE MUA
-        super.solvers.add(CanonicalSolversFactory.createAStarODMUAZeroSolver());          // PURE MUA | A*OD | h0 Zero
-        super.solvers.add(CanonicalSolversFactory.createAStarODMUAH1MaxSolver());         // PURE MUA | A*OD | h1 Max
-        super.solvers.add(CanonicalSolversFactory.createAStarODMUAH2EnhancedMaxSolver()); // PURE MUA | A*OD | h2 Enhanced Max
-        super.solvers.add(CanonicalSolversFactory.createAStarODMUAH3JointSolver());       // PURE MUA | A*OD | h3 Joint
-        super.solvers.add(CanonicalSolversFactory.createAStarODMUAH4RandomPickSolver());  // PURE MUA | A*OD | h4 Random Pick
+        super.solvers.add(CanonicalSolversFactory.createAStarODMUAZeroSolver());            // PURE MUA | A*OD | Zero
+        super.solvers.add(CanonicalSolversFactory.createAStarODMUAMaxSolver());             // PURE MUA | A*OD | MAX
+        super.solvers.add(CanonicalSolversFactory.createAStarODMUAIHSolver());              // PURE MUA | A*OD | IH (increasing)
+        super.solvers.add(CanonicalSolversFactory.createAStarODMUAMHSolver());              // PURE MUA | A*OD | MH (merge)
 
         // A*OD - PURE FUEL
-        // super.solvers.add(CanonicalSolversFactory.createAStarODFuelZeroSolver());          // PURE FUEL | A*OD | h0 Zero
-        // super.solvers.add(CanonicalSolversFactory.createAStarODFuelH1MaxSolver());         // PURE FUEL | A*OD | h1 Max
-        // super.solvers.add(CanonicalSolversFactory.createAStarODFuelH2EnhancedMaxSolver()); // PURE FUEL | A*OD | h2 Enhanced Max
-        // super.solvers.add(CanonicalSolversFactory.createAStarODFuelH3JointSolver());       // PURE FUEL | A*OD | h3 Joint
-        // super.solvers.add(CanonicalSolversFactory.createAStarODFuelH4RandomPickSolver());  // PURE FUEL | A*OD | h4 Random Pick
+        // super.solvers.add(CanonicalSolversFactory.createAStarODFuelZeroSolver());        // PURE FUEL | A*OD | Zero
+        // super.solvers.add(CanonicalSolversFactory.createAStarODFuelMaxSolver());         // PURE FUEL | A*OD | MAX
+        // super.solvers.add(CanonicalSolversFactory.createAStarODFuelIHSolver());          // PURE FUEL | A*OD | IH (increasing)
+        // super.solvers.add(CanonicalSolversFactory.createAStarODFuelMHSolver());          // PURE FUEL | A*OD | MH (merge)
 
         // A*OD - PURE SST
-        // super.solvers.add(CanonicalSolversFactory.createAStarODSSTZeroSolver());          // PURE SST | A*OD | h0 Zero
-        // super.solvers.add(CanonicalSolversFactory.createAStarODSSTH1MaxSolver());         // PURE SST | A*OD | h1 Max
-        // super.solvers.add(CanonicalSolversFactory.createAStarODSSTH2EnhancedMaxSolver()); // PURE SST | A*OD | h2 Enhanced Max
-        // super.solvers.add(CanonicalSolversFactory.createAStarODSSTH3JointSolver());       // PURE SST | A*OD | h3 Joint
-        // super.solvers.add(CanonicalSolversFactory.createAStarODSSTH4RandomPickSolver());  // PURE SST | A*OD | h4 Random Pick
+        // super.solvers.add(CanonicalSolversFactory.createAStarODSSTZeroSolver());         // PURE SST | A*OD | Zero
+        // super.solvers.add(CanonicalSolversFactory.createAStarODSSTMaxSolver());          // PURE SST | A*OD | MAX
+        // super.solvers.add(CanonicalSolversFactory.createAStarODSSTIHSolver());           // PURE SST | A*OD | IH (increasing)
+        // super.solvers.add(CanonicalSolversFactory.createAStarODSSTMHSolver());           // PURE SST | A*OD | MH (merge)
 
         // LaCAM:
         // super.solvers.add(CanonicalSolversFactory.createLaCAMtSolver()); 
 
-//───────────────────────────────────────────── Static UA ─────────────────────────────────────────────
+//  ───────────────────────────────────────────── Static UA ─────────────────────────────────────────────
 
         // CBS:
         // super.solvers.add(CanonicalSolversFactory.createCBS_SST_Solver());   // SST
@@ -107,7 +108,8 @@ public class GenericRunManager extends A_RunManager {
         // LaCAM:
         // super.solvers.add(CanonicalSolversFactory.createLaCAMtStaticSolver());
 
-//──────────────────────────────────────────────────────────────────────────────────────────────────────
+//  ──────────────────────────────────────────────────────────────────────────────────────────────────────
+
     }
  
     public void overrideSolvers(@NotNull List<I_Solver> solvers){

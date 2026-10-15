@@ -32,7 +32,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * End-to-end dry run of the exact 6-solver MUA experiment configuration (matching
+ * End-to-end dry run of the exact 5-solver MUA experiment configuration (matching
  * {@link GenericRunManager#setSolvers()}) against tiny instances, writing a real CSV via the same
  * {@link Metrics}/{@link InstanceReport} machinery the real experiment runner uses, so the CSV itself (not just
  * in-memory Java objects) can be inspected. This is a readiness check, not a correctness oracle for any one solver
@@ -41,13 +41,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class MuaExperimentDryRunTest {
 
-    private static final List<String> SIX_MUA_SOLVER_NAMES = List.of(
+    private static final List<String> FIVE_MUA_SOLVER_NAMES = List.of(
             CanonicalSolversFactory.CBS_STAR_MUA_NAME,
             CanonicalSolversFactory.ASTAR_OD_MUA_ZERO_NAME,
-            CanonicalSolversFactory.ASTAR_OD_MUA_H1_MAX_NAME,
-            CanonicalSolversFactory.ASTAR_OD_MUA_H2_ENHANCED_MAX_NAME,
-            CanonicalSolversFactory.ASTAR_OD_MUA_H3_JOINT_NAME,
-            CanonicalSolversFactory.ASTAR_OD_MUA_H4_RANDOM_PICK_NAME);
+            CanonicalSolversFactory.ASTAR_OD_MUA_MAX_NAME,
+            CanonicalSolversFactory.ASTAR_OD_MUA_IH_NAME,
+            CanonicalSolversFactory.ASTAR_OD_MUA_MH_NAME);
 
     // the exact same header the real GenericRunManager/A_RunManager writes to the live results CSV
     private static final String[] PRODUCTION_HEADER = new String[]{
@@ -93,11 +92,11 @@ class MuaExperimentDryRunTest {
     }
 
     @Test
-    void sixSolverConfigurationProducesOneRowPerSolverPerInstanceIncludingOnFailure() throws IOException {
+    void fiveSolverConfigurationProducesOneRowPerSolverPerInstanceIncludingOnFailure() throws IOException {
         MAPF_Instance solvable = arbitrary("cbs_star_side_pocket", 3);
         MAPF_Instance unsolvable = arbitrary("two_vertex_swap", 2);
 
-        for (String name : SIX_MUA_SOLVER_NAMES) {
+        for (String name : FIVE_MUA_SOLVER_NAMES) {
             // --- solvable instance: normal timeout ---
             runOne(name, solvable, 10_000);
             // --- unsolvable instance: normal timeout (proves-infeasible path) ---
@@ -108,7 +107,7 @@ class MuaExperimentDryRunTest {
         }
 
         List<InstanceReport> reports = Metrics.getAllReports();
-        assertEquals(SIX_MUA_SOLVER_NAMES.size() * 3, reports.size(), "expected exactly one row per (solver, run) combination");
+        assertEquals(FIVE_MUA_SOLVER_NAMES.size() * 3, reports.size(), "expected exactly one row per (solver, run) combination");
 
         Path csvPath = Path.of("target", "dry-run-mua-experiment.csv");
         Files.createDirectories(csvPath.getParent());

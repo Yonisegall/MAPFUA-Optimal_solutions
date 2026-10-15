@@ -135,6 +135,7 @@ public abstract class A_Solver implements I_Solver{
         this.endTime = getCurrentTimeMS_NSAccuracy();
 
         instanceReport.putIntegerValue(InstanceReport.StandardFields.timeoutThresholdMS, (int) this.maximumRuntime);
+        instanceReport.putIntegerValue(InstanceReport.StandardFields.timedOut, this.abortedForTimeout ? 1 : 0);
         instanceReport.putStringValue(InstanceReport.StandardFields.startDateTime, new Date(startDate).toString());
         instanceReport.putStringValue(InstanceReport.StandardFields.processorInfo, processorInfo);
         int elapsedTime = (int)(endTime-startTime);

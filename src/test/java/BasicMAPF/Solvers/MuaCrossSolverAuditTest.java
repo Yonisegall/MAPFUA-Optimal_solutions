@@ -26,8 +26,8 @@ import java.util.PriorityQueue;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * AUDIT-ONLY, not a permanent regression test. Cross-checks all 6 canonical MUA solvers
- * (CBSStarMUA, AStarODMUAZero/H1Max/H2EnhancedMax/H3Joint/H4RandomPick) against an independent
+ * AUDIT-ONLY, not a permanent regression test. Cross-checks all 5 canonical MUA solvers
+ * (CBSStarMUA, AStarODMUAZero/Max/IH/MH) against an independent
  * brute-force joint-state-space oracle for exact optimal MUA*, on a battery of tiny hand-built
  * instances covering the required semantic categories from the audit brief. Produces a printed
  * results table (no hard assertions on solver correctness, by design, so the whole battery runs
@@ -92,7 +92,7 @@ class MuaCrossSolverAuditTest {
     @Test
     void auditAllInstancesAgainstOracleAndAllSolvers() {
         List<String[]> table = new ArrayList<>();
-        table.add(new String[]{"instance", "oracle_MUA*", "CBSStarMUA", "H0Zero", "H1Max", "H2EnhancedMax", "H3Joint", "H4RandomPick"});
+        table.add(new String[]{"instance", "oracle_MUA*", "CBSStarMUA", "Zero", "MAX", "IH", "MH"});
 
         List<AuditInstance> instances = List.of(
                 new AuditInstance("cbs_star_side_pocket (MUA*=1, swap via pocket, 1 UA helps 2 AAs)", "cbs_star_side_pocket", 3, 30_000, 30_000),
@@ -101,7 +101,7 @@ class MuaCrossSolverAuditTest {
                 new AuditInstance("audit_mua_side_pocket_idle_ua (2nd UA never needs to move)", "audit_mua_side_pocket_idle_ua", 4, 30_000, 30_000),
                 new AuditInstance("audit_mua_return_home (attempted forced-UA-round-trip topology; oracle found it UNSOLVABLE - a second independent unsolvable-case cross-check)", "audit_mua_return_home", 3, 30_000, 30_000),
                 new AuditInstance("audit_mua_double_pocket_connected (MUA*=2, connected, 2 distinct UAs each required by a different AA pair)", "audit_mua_double_pocket_connected", 6, 60_000, 25_000),
-                new AuditInstance("cbs_star_double_side_pocket (MUA*=2, DISJOINT clusters - known CBS*/H3 stress case)", "cbs_star_double_side_pocket", 6, 60_000, 25_000)
+                new AuditInstance("cbs_star_double_side_pocket (MUA*=2, DISJOINT clusters - known CBS*/MH stress case)", "cbs_star_double_side_pocket", 6, 60_000, 25_000)
         );
 
         StringBuilder deepDive = new StringBuilder();
@@ -109,23 +109,22 @@ class MuaCrossSolverAuditTest {
         for (AuditInstance ai : instances) {
             MAPF_Instance instance = loadArbitrary(ai.fixturePrefix, ai.agentCount);
             if (instance == null) {
-                table.add(new String[]{ai.label, "LOAD-FAILED", "-", "-", "-", "-", "-", "-"});
+                table.add(new String[]{ai.label, "LOAD-FAILED", "-", "-", "-", "-", "-"});
                 continue;
             }
 
             OracleResult oracle = exactMUA(instance, ORACLE_STATE_CAP);
             String oracleStr = oracle.feasible ? String.valueOf(oracle.mua) : "INFEASIBLE";
 
-            String[] row = new String[8];
+            String[] row = new String[7];
             row[0] = ai.label + " [" + instance.agents.size() + " agents]";
             row[1] = oracleStr;
 
             row[2] = runOneCell(ai, "CBSStarMUA", CanonicalSolversFactory::createCBSStarMUASolver, instance, oracle, ai.normalTimeoutMs, deepDive);
             row[3] = runOneCell(ai, "AStarODMUAZero", CanonicalSolversFactory::createAStarODMUAZeroSolver, instance, oracle, ai.normalTimeoutMs, deepDive);
-            row[4] = runOneCell(ai, "AStarODMUAH1Max", CanonicalSolversFactory::createAStarODMUAH1MaxSolver, instance, oracle, ai.normalTimeoutMs, deepDive);
-            row[5] = runOneCell(ai, "AStarODMUAH2EnhancedMax", CanonicalSolversFactory::createAStarODMUAH2EnhancedMaxSolver, instance, oracle, ai.normalTimeoutMs, deepDive);
-            row[6] = runOneCell(ai, "AStarODMUAH3Joint", CanonicalSolversFactory::createAStarODMUAH3JointSolver, instance, oracle, ai.h3TimeoutMs, deepDive);
-            row[7] = runOneCell(ai, "AStarODMUAH4RandomPick", CanonicalSolversFactory::createAStarODMUAH4RandomPickSolver, instance, oracle, ai.normalTimeoutMs, deepDive);
+            row[4] = runOneCell(ai, "AStarODMUAMax", CanonicalSolversFactory::createAStarODMUAMaxSolver, instance, oracle, ai.normalTimeoutMs, deepDive);
+            row[5] = runOneCell(ai, "AStarODMUAIH", CanonicalSolversFactory::createAStarODMUAIHSolver, instance, oracle, ai.normalTimeoutMs, deepDive);
+            row[6] = runOneCell(ai, "AStarODMUAMH", CanonicalSolversFactory::createAStarODMUAMHSolver, instance, oracle, ai.mhTimeoutMs, deepDive);
 
             table.add(row);
             System.out.println("[audit] finished instance: " + ai.label + " oracle=" + oracleStr);
@@ -414,7 +413,7 @@ class MuaCrossSolverAuditTest {
     // instance loading + misc plumbing
     // ---------------------------------------------------------------------------------------------
 
-    private record AuditInstance(String label, String fixturePrefix, int agentCount, long normalTimeoutMs, long h3TimeoutMs) {}
+    private record AuditInstance(String label, String fixturePrefix, int agentCount, long normalTimeoutMs, long mhTimeoutMs) {}
 
     private MAPF_Instance loadArbitrary(String prefix, int agents) {
         String dir = IO_Manager.buildPath(new String[]{IO_Manager.testResources_Directory, "Instances", "ArbitraryGraphs"});

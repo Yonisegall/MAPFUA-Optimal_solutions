@@ -1,6 +1,5 @@
 package BasicMAPF.Solvers.AStart_OD.MAPFUA_MA;
 
-import BasicMAPF.Instances.Agent;
 import BasicMAPF.Instances.Maps.I_Location;
 
 import java.util.ArrayDeque;
@@ -14,16 +13,19 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.PriorityQueue;
-import java.util.Random;
 import java.util.Set;
 
+/**
+ * MAPFUA capture heuristics (ZERO, MAX, IH, MH). Only currently-unmoved original UAs are capturable
+ * obstacles; already-moved UAs were paid for in g and are relaxed away. Only active AAs (target not yet
+ * visited under reach-goal-once) are considered.
+ */
 final class MapfuaCaptureHeuristic implements MuaHeuristic {
     private final MuaProblemContext context;
     private final MapfuaObjective objective;
     private final MuaHeuristicType type;
     private final boolean lazyEvaluation;
     private final MuaHeuristicMetrics metrics = new MuaHeuristicMetrics();
-    private final Random random = new Random(4);
 
     MapfuaCaptureHeuristic(MuaProblemContext context, MapfuaObjective objective, MuaHeuristicType type, boolean lazyEvaluation) {
         this.context = context;
@@ -42,10 +44,9 @@ final class MapfuaCaptureHeuristic implements MuaHeuristic {
         }
         metrics.lazyFullEvaluations++;
         return switch (type) {
-            case MAX -> h1(state);
-            case ENHANCED_MAX -> h2(state);
-            case JOINT_CAPTURE -> h3(state);
-            case RANDOM_PICK -> h4(state);
+            case MAX -> max(state);
+            case INCREASING -> increasing(state);
+            case MERGE -> merge(state);
             case ZERO -> 0;
         };
     }
@@ -70,45 +71,54 @@ final class MapfuaCaptureHeuristic implements MuaHeuristic {
         return metrics;
     }
 
-    private long h1(MuaSearchState state) {
+    /** MAX: max over active AAs of cap(ai), each computed by an independent single-AA capture search. */
+    private long max(MuaSearchState state) {
         if (objective != MapfuaObjective.MUA) return independentDistanceLowerBound(state);
         long best = 0;
         for (int agentIndex : activeAssigned(state)) {
-            CaptureSearchResult r = minCaptureSearch(agentIndex, state.positions[agentIndex], state.movedUAs, false);
-            if (r.minCaptures == Integer.MAX_VALUE) return context.uaStartLocations.length + 1L;
-            best = Math.max(best, r.minCaptures);
+            int cap = minCaptureSearch(agentIndex, state.positions[agentIndex], state.movedUAs);
+            if (cap == Integer.MAX_VALUE) return context.uaStartLocations.length + 1L;
+            best = Math.max(best, cap);
         }
         return best;
     }
 
-    private long h2(MuaSearchState state) {
+    /**
+     * IH: try removing no UA, then every single unmoved UA, then every pair, etc. (deterministic
+     * lexicographic order). Returns the first k for which some k-subset lets every active AA
+     * independently reach its target.
+     */
+    private long increasing(MuaSearchState state) {
         if (objective != MapfuaObjective.MUA) return independentDistanceLowerBound(state);
         List<Integer> active = activeAssigned(state);
         if (active.isEmpty()) return 0;
-        int k = 0;
-        Map<Integer, CaptureSearchResult> perAgent = new HashMap<>();
-        for (int agentIndex : active) {
-            CaptureSearchResult r = minCaptureSearch(agentIndex, state.positions[agentIndex], state.movedUAs, true);
-            perAgent.put(agentIndex, r);
-            if (r.minCaptures == Integer.MAX_VALUE) return context.uaStartLocations.length + 1L;
-            k = Math.max(k, r.minCaptures);
+        int[] uaIndexes = staticIndexes(context.staticUAs(state.movedUAs));
+        for (int k = 0; k <= uaIndexes.length; k++) {
+            if (someSubsetMakesAllReachable(state, active, uaIndexes, k, 0, new BitSet())) return k;
         }
-        boolean helpful = false;
-        for (int agentIndex : active) {
-            CaptureSearchResult r = perAgent.get(agentIndex);
-            if (r.minCaptures != k) continue;
-            for (BitSet set : r.captureSets) {
-                if (allAssignedReachable(state, set)) {
-                    helpful = true;
-                    break;
-                }
-            }
-            if (helpful) break;
-        }
-        return helpful ? k : k + 1L;
+        return context.uaStartLocations.length + 1L;
     }
 
-    private long h3(MuaSearchState state) {
+    private boolean someSubsetMakesAllReachable(MuaSearchState state, List<Integer> active, int[] items, int k,
+                                                int start, BitSet removed) {
+        int chosen = removed.cardinality();
+        if (chosen == k) {
+            metrics.addInternalExpanded(1);
+            return allAssignedReachable(state, active, removed);
+        }
+        for (int i = start; i <= items.length - (k - chosen); i++) {
+            removed.set(items[i]);
+            if (someSubsetMakesAllReachable(state, active, items, k, i + 1, removed)) return true;
+            removed.clear(items[i]);
+        }
+        return false;
+    }
+
+    /**
+     * MH: all active AAs merged into one meta-agent. Joint relaxed search (vertex/swap legal among
+     * active AAs, reach-goal-once via the served bitset) minimizing distinct unmoved UAs captured.
+     */
+    private long merge(MuaSearchState state) {
         List<Integer> active = activeAssigned(state);
         if (active.isEmpty()) return 0;
         PriorityQueue<JointCANode> open = new PriorityQueue<>((a, b) -> {
@@ -167,32 +177,6 @@ final class MapfuaCaptureHeuristic implements MuaHeuristic {
         return context.uaStartLocations.length + active.size() + 1L;
     }
 
-    private long h4(MuaSearchState state) {
-        if (objective != MapfuaObjective.MUA) return independentDistanceLowerBound(state);
-        BitSet staticUAs = context.staticUAs(state.movedUAs);
-        int[] uaIndexes = staticIndexes(staticUAs);
-        for (int k = 0; k <= uaIndexes.length; k++) {
-            List<BitSet> sets = new ArrayList<>();
-            enumerateCombinations(uaIndexes, k, 0, new BitSet(), sets);
-            deterministicShuffle(sets);
-            for (BitSet set : sets) {
-                if (allAssignedReachable(state, set)) {
-                    return k;
-                }
-            }
-        }
-        return context.uaStartLocations.length + 1L;
-    }
-
-    private void deterministicShuffle(List<BitSet> sets) {
-        for (int i = sets.size() - 1; i > 0; i--) {
-            int j = random.nextInt(i + 1);
-            BitSet tmp = sets.get(i);
-            sets.set(i, sets.get(j));
-            sets.set(j, tmp);
-        }
-    }
-
     private long independentDistanceLowerBound(MuaSearchState state) {
         long distance = 0;
         BitSet staticUAs = context.staticUAs(state.movedUAs);
@@ -214,7 +198,8 @@ final class MapfuaCaptureHeuristic implements MuaHeuristic {
         return active;
     }
 
-    private CaptureSearchResult minCaptureSearch(int agentIndex, I_Location start, BitSet movedUAs, boolean collectSets) {
+    /** cap(ai): minimum number of distinct unmoved UAs ai must capture to reach its target (MAX_VALUE if unreachable). */
+    private int minCaptureSearch(int agentIndex, I_Location start, BitSet movedUAs) {
         I_Location target = context.targetOf(agentIndex);
         BitSet staticUAs = context.staticUAs(movedUAs);
         PriorityQueue<CaptureNode> open = new PriorityQueue<>((a, b) -> {
@@ -225,8 +210,6 @@ final class MapfuaCaptureHeuristic implements MuaHeuristic {
             return Long.compare(a.id, b.id);
         });
         Set<CaptureKey> closed = new HashSet<>();
-        List<BitSet> sets = new ArrayList<>();
-        int bestK = Integer.MAX_VALUE;
         long serial = 0;
         open.add(new CaptureNode(start, new BitSet(), 0, serial++));
         metrics.addInternalGenerated(1);
@@ -235,30 +218,22 @@ final class MapfuaCaptureHeuristic implements MuaHeuristic {
             CaptureKey key = new CaptureKey(n.location, n.captures);
             if (!closed.add(key)) continue;
             metrics.addInternalExpanded(1);
-            int k = n.captures.cardinality();
-            if (bestK != Integer.MAX_VALUE && k > bestK) break;
-            if (n.location.equals(target)) {
-                bestK = k;
-                if (!collectSets) return new CaptureSearchResult(k, List.of((BitSet) n.captures.clone()));
-                sets.add((BitSet) n.captures.clone());
-                continue;
-            }
+            if (n.location.equals(target)) return n.captures.cardinality();
             for (I_Location next : orderedMoves(n.location, false)) {
                 BitSet caps = (BitSet) n.captures.clone();
                 int ua = capturedUAAt(next, staticUAs);
                 if (ua >= 0) caps.set(ua);
-                if (bestK != Integer.MAX_VALUE && caps.cardinality() > bestK) continue;
                 open.add(new CaptureNode(next, caps, n.fuel + (next.equals(n.location) ? 0 : 1), serial++));
                 metrics.addInternalGenerated(1);
             }
         }
-        return new CaptureSearchResult(bestK, dedupeSets(sets));
+        return Integer.MAX_VALUE;
     }
 
-    private boolean allAssignedReachable(MuaSearchState state, BitSet removedUAs) {
+    private boolean allAssignedReachable(MuaSearchState state, List<Integer> active, BitSet removedUAs) {
         BitSet obstacles = context.staticUAs(state.movedUAs);
         obstacles.andNot(removedUAs);
-        for (int agentIndex : activeAssigned(state)) {
+        for (int agentIndex : active) {
             if (!reachableAvoiding(state.positions[agentIndex], context.targetOf(agentIndex), obstacles)) return false;
         }
         return true;
@@ -334,25 +309,6 @@ final class MapfuaCaptureHeuristic implements MuaHeuristic {
         return arr;
     }
 
-    private void enumerateCombinations(int[] items, int k, int start, BitSet current, List<BitSet> result) {
-        if (current.cardinality() == k) {
-            result.add((BitSet) current.clone());
-            return;
-        }
-        for (int i = start; i < items.length; i++) {
-            current.set(items[i]);
-            enumerateCombinations(items, k, i + 1, current, result);
-            current.clear(items[i]);
-        }
-    }
-
-    private List<BitSet> dedupeSets(List<BitSet> sets) {
-        Map<BitSet, BitSet> unique = new HashMap<>();
-        for (BitSet set : sets) unique.put((BitSet) set.clone(), set);
-        return new ArrayList<>(unique.keySet());
-    }
-
-    private record CaptureSearchResult(int minCaptures, List<BitSet> captureSets) { }
     private record CaptureKey(I_Location location, BitSet captures) {
         CaptureKey {
             captures = (BitSet) captures.clone();

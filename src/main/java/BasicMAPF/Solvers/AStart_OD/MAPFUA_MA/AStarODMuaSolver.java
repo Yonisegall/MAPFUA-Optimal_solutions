@@ -65,10 +65,9 @@ public class AStarODMuaSolver extends A_Solver {
         };
         String heuristicName = switch (type) {
             case ZERO -> "Zero";
-            case MAX -> "H1Max";
-            case ENHANCED_MAX -> "H2EnhancedMax";
-            case JOINT_CAPTURE -> "H3Joint";
-            case RANDOM_PICK -> "H4RandomPick";
+            case MAX -> "Max";
+            case INCREASING -> "IH";
+            case MERGE -> "MH";
         };
         return "AStarOD" + objectiveName + heuristicName;
     }

@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.PriorityQueue;
+import java.util.Random;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -91,7 +92,7 @@ class AStarODMuaSolverTest {
     @Test
     void noRequiredUaMovementReturnsMuaZero() {
         MAPF_Instance instance = arbitrary("mapfua_ma_no_ua_move.scene", 2);
-        Solution solution = CanonicalSolversFactory.createAStarODMUAH1MaxSolver().solve(instance, new RunParametersBuilder()
+        Solution solution = CanonicalSolversFactory.createAStarODMUAMaxSolver().solve(instance, new RunParametersBuilder()
                 .setTimeout(10_000)
                 .setInstanceReport(Metrics.newInstanceReport())
                 .createRP());
@@ -141,8 +142,8 @@ class AStarODMuaSolverTest {
         for (MuaSearchState state : states) {
             for (MapfuaObjective objective : MapfuaObjective.values()) {
                 long exact = exactRemainingCost(context, state, objective);
-                for (MuaHeuristicType type : List.of(MuaHeuristicType.MAX, MuaHeuristicType.ENHANCED_MAX,
-                        MuaHeuristicType.JOINT_CAPTURE, MuaHeuristicType.RANDOM_PICK)) {
+                for (MuaHeuristicType type : List.of(MuaHeuristicType.MAX, MuaHeuristicType.INCREASING,
+                        MuaHeuristicType.MERGE)) {
                     long h = new MapfuaCaptureHeuristic(context, objective, type, false).estimate(state);
                     assertTrue(h <= exact, objective + " " + type + " returned " + h + " > " + exact);
                 }
@@ -170,7 +171,7 @@ class AStarODMuaSolverTest {
     }
 
     @Test
-    void h3HonorsTransientVisitedTargetAfterAgentLeavesGoal() {
+    void mergeHonorsTransientVisitedTargetAfterAgentLeavesGoal() {
         MAPF_Instance instance = sidePocket();
         MuaProblemContext context = new MuaProblemContext(instance);
         I_Location[] positions = starts(context);
@@ -181,7 +182,7 @@ class AStarODMuaSolverTest {
         visited.set(1);
         visited.set(2);
         MuaSearchState state = MuaSearchState.full(5, positions, new BitSet(), visited, 0, 0, null, null, 0);
-        assertEquals(0, new MapfuaCaptureHeuristic(context, MapfuaObjective.MUA, MuaHeuristicType.JOINT_CAPTURE, false).estimate(state));
+        assertEquals(0, new MapfuaCaptureHeuristic(context, MapfuaObjective.MUA, MuaHeuristicType.MERGE, false).estimate(state));
     }
 
     @Test
@@ -261,6 +262,219 @@ class AStarODMuaSolverTest {
         assertNull(solution);
     }
 
+    // ---------------------------------------------------------------------------------------------
+    // Source-paper heuristics: ZERO, MAX, IH (increasing), MH (merge)
+    // ---------------------------------------------------------------------------------------------
+
+    @Test
+    void canonicalMuaSolverNamesAreExactlyZeroMaxIhMh() {
+        assertEquals("AStarODMUAZero", CanonicalSolversFactory.ASTAR_OD_MUA_ZERO_NAME);
+        assertEquals("AStarODMUAMax", CanonicalSolversFactory.ASTAR_OD_MUA_MAX_NAME);
+        assertEquals("AStarODMUAIH", CanonicalSolversFactory.ASTAR_OD_MUA_IH_NAME);
+        assertEquals("AStarODMUAMH", CanonicalSolversFactory.ASTAR_OD_MUA_MH_NAME);
+        assertEquals(List.of(MuaHeuristicType.ZERO, MuaHeuristicType.MAX, MuaHeuristicType.INCREASING, MuaHeuristicType.MERGE),
+                List.of(MuaHeuristicType.values()));
+        for (String legacy : List.of("AStarODMUAH1Max", "AStarODMUAH2EnhancedMax", "AStarODMUAH3Joint", "AStarODMUAH4RandomPick")) {
+            assertThrows(IllegalArgumentException.class, () -> CanonicalSolversFactory.createSolver(legacy), legacy);
+        }
+    }
+
+    @Test
+    void zeroHeuristicIsAlwaysZero() {
+        for (MAPF_Instance instance : List.of(sidePocket(), heurMax(), heurPair(), heurDecoy())) {
+            MuaProblemContext context = new MuaProblemContext(instance);
+            assertEquals(0, h(context, MuaHeuristicType.ZERO, rootState(context)));
+        }
+    }
+
+    @Test
+    void maxTakesMaximumOfIndependentPerAaCaptureCounts() {
+        // a0 must capture U1 (cap=1); a1 must capture V1 and V2 (cap=2).
+        MuaProblemContext context = new MuaProblemContext(heurMax());
+        MuaSearchState root = rootState(context);
+        assertEquals(2, h(context, MuaHeuristicType.MAX, root));
+        assertEquals(3, h(context, MuaHeuristicType.INCREASING, root));
+        assertEquals(3, h(context, MuaHeuristicType.MERGE, root));
+    }
+
+    @Test
+    void increasingNeedsPairWhenNoSingleUaRemovalHelpsAllAas() {
+        // a0 is blocked only by X, a1 only by Y: no single removal frees both, the pair {X, Y} does.
+        MuaProblemContext context = new MuaProblemContext(heurPair());
+        MuaSearchState root = rootState(context);
+        assertEquals(1, h(context, MuaHeuristicType.MAX, root));
+        assertEquals(2, h(context, MuaHeuristicType.INCREASING, root));
+        assertEquals(2, h(context, MuaHeuristicType.MERGE, root));
+    }
+
+    @Test
+    void increasingFindsTheSingleRelevantUaAmongDecoys() {
+        // Three decoy UAs (enumerated first) never block anybody; only the UA on X blocks both AAs.
+        MuaProblemContext context = new MuaProblemContext(heurDecoy());
+        MuaSearchState root = rootState(context);
+        assertEquals(4, context.uaStartLocations.length);
+        assertEquals(1, h(context, MuaHeuristicType.INCREASING, root));
+        assertEquals(1, h(context, MuaHeuristicType.MAX, root));
+        assertEquals(1, h(context, MuaHeuristicType.MERGE, root));
+    }
+
+    @Test
+    void mergeReflectsAaInteractionThatIndependentReachabilityIgnores() {
+        // Side pocket: each AA alone reaches its target capture-free, but the two AAs must swap
+        // along L-C-R, which jointly requires entering the pocket P and capturing its UA.
+        MuaProblemContext context = new MuaProblemContext(sidePocket());
+        MuaSearchState root = rootState(context);
+        assertEquals(0, h(context, MuaHeuristicType.MAX, root));
+        assertEquals(0, h(context, MuaHeuristicType.INCREASING, root));
+        assertEquals(1, h(context, MuaHeuristicType.MERGE, root));
+        assertEquals(1, exactRemainingCost(context, root, MapfuaObjective.MUA));
+    }
+
+    @Test
+    void alreadyMovedUaIsNeverChargedAgain() {
+        // heurMax UA indexes: 0=U1, 1=V1, 2=V2. A moved UA sitting back on its start is still paid for.
+        MuaProblemContext context = new MuaProblemContext(heurMax());
+        BitSet movedV1 = new BitSet();
+        movedV1.set(1);
+        MuaSearchState s1 = state(starts(context), movedV1, initialVisited(context));
+        assertEquals(1, h(context, MuaHeuristicType.MAX, s1));
+        assertEquals(2, h(context, MuaHeuristicType.INCREASING, s1));
+        assertEquals(2, h(context, MuaHeuristicType.MERGE, s1));
+        assertEquals(2, exactRemainingCost(context, s1, MapfuaObjective.MUA));
+
+        BitSet movedU1V1 = (BitSet) movedV1.clone();
+        movedU1V1.set(0);
+        MuaSearchState s2 = state(starts(context), movedU1V1, initialVisited(context));
+        assertEquals(1, h(context, MuaHeuristicType.MAX, s2));
+        assertEquals(1, h(context, MuaHeuristicType.INCREASING, s2));
+        assertEquals(1, h(context, MuaHeuristicType.MERGE, s2));
+
+        BitSet allMoved = new BitSet();
+        allMoved.set(0, 3);
+        MuaSearchState s3 = state(starts(context), allMoved, initialVisited(context));
+        for (MuaHeuristicType type : MuaHeuristicType.values()) assertEquals(0, h(context, type, s3), type.name());
+    }
+
+    @Test
+    void alreadyServedAaCreatesNoRemainingRequirement() {
+        // heurPair: a1 has already visited T2 and walked back to S2; only a0's need for X remains.
+        MuaProblemContext context = new MuaProblemContext(heurPair());
+        BitSet visited = initialVisited(context);
+        visited.set(1);
+        MuaSearchState s = state(starts(context), new BitSet(), visited);
+        assertEquals(1, h(context, MuaHeuristicType.MAX, s));
+        assertEquals(1, h(context, MuaHeuristicType.INCREASING, s));
+        assertEquals(1, h(context, MuaHeuristicType.MERGE, s));
+        assertEquals(1, exactRemainingCost(context, s, MapfuaObjective.MUA));
+
+        // heurMax: a1 (the cap=2 agent) already served -> only a0's single capture remains.
+        MuaProblemContext maxContext = new MuaProblemContext(heurMax());
+        BitSet maxVisited = initialVisited(maxContext);
+        maxVisited.set(1);
+        MuaSearchState m = state(starts(maxContext), new BitSet(), maxVisited);
+        assertEquals(1, h(maxContext, MuaHeuristicType.MAX, m));
+        assertEquals(1, h(maxContext, MuaHeuristicType.INCREASING, m));
+        assertEquals(1, h(maxContext, MuaHeuristicType.MERGE, m));
+    }
+
+    @Test
+    void sourceHeuristicsAreAdmissibleAndOrderedMaxLeIhLeMh() {
+        Random random = new Random(12345);
+        for (MAPF_Instance instance : List.of(sidePocket(), heurMax(), heurPair(), heurDecoy())) {
+            MuaProblemContext context = new MuaProblemContext(instance);
+            List<MuaSearchState> states = new ArrayList<>();
+            states.add(rootState(context));
+            for (int walk = 0; walk < 3; walk++) {
+                MuaSearchState current = rootState(context);
+                for (int step = 0; step < 4; step++) {
+                    current = randomSuccessor(context, current, random);
+                    states.add(current);
+                }
+            }
+            for (MuaSearchState s : states) {
+                long exact = exactRemainingCost(context, s, MapfuaObjective.MUA);
+                long max = h(context, MuaHeuristicType.MAX, s);
+                long ih = h(context, MuaHeuristicType.INCREASING, s);
+                long mh = h(context, MuaHeuristicType.MERGE, s);
+                String where = instance.name + " moved=" + s.movedUAs + " visited=" + s.visitedTargets
+                        + " MAX=" + max + " IH=" + ih + " MH=" + mh + " exact=" + exact;
+                assertTrue(0 <= max && max <= exact, where);
+                assertTrue(0 <= ih && ih <= exact, where);
+                assertTrue(0 <= mh && mh <= exact, where);
+                assertTrue(max <= ih && ih <= mh, where);
+            }
+        }
+    }
+
+    @Test
+    void sourceHeuristicSolversReturnOptimalMuaOnFixtures() {
+        List<Object[]> fixtures = List.of(
+                new Object[]{"mapfua_heur_max.scene", 5, 3},
+                new Object[]{"mapfua_heur_pair.scene", 4, 2},
+                new Object[]{"mapfua_heur_decoy.scene", 6, 1});
+        for (Object[] fixture : fixtures) {
+            String scenario = (String) fixture[0];
+            MAPF_Instance instance = arbitrary(scenario, (Integer) fixture[1]);
+            for (String name : List.of(CanonicalSolversFactory.ASTAR_OD_MUA_ZERO_NAME, CanonicalSolversFactory.ASTAR_OD_MUA_MAX_NAME,
+                    CanonicalSolversFactory.ASTAR_OD_MUA_IH_NAME, CanonicalSolversFactory.ASTAR_OD_MUA_MH_NAME)) {
+                Solution solution = CanonicalSolversFactory.createSolver(name).solve(instance, new RunParametersBuilder()
+                        .setTimeout(30_000)
+                        .setInstanceReport(Metrics.newInstanceReport())
+                        .createRP());
+                assertNotNull(solution, name + " on " + scenario);
+                assertTrue(solution.solves(instance), name + " on " + scenario);
+                assertEquals((int) (Integer) fixture[2], solution.MUA(), name + " on " + scenario);
+            }
+        }
+    }
+
+    private long h(MuaProblemContext context, MuaHeuristicType type, MuaSearchState state) {
+        return new MapfuaCaptureHeuristic(context, MapfuaObjective.MUA, type, false).estimate(state);
+    }
+
+    private BitSet initialVisited(MuaProblemContext context) {
+        BitSet visited = new BitSet();
+        for (int i = 0; i < context.agents.size(); i++) {
+            Agent agent = context.agents.get(i);
+            if (agent.isUnassigned || agent.source.equals(agent.target)) visited.set(i);
+        }
+        return visited;
+    }
+
+    private MuaSearchState rootState(MuaProblemContext context) {
+        return state(starts(context), new BitSet(), initialVisited(context));
+    }
+
+    private MuaSearchState state(I_Location[] positions, BitSet moved, BitSet visited) {
+        return MuaSearchState.full(0, positions, moved, visited, 0, 0, null, null, 0);
+    }
+
+    private MuaSearchState randomSuccessor(MuaProblemContext context, MuaSearchState s, Random random) {
+        List<I_Location[]> jointMoves = new ArrayList<>();
+        enumerateExactJointMoves(context, s.positions, 0, new I_Location[s.positions.length], jointMoves);
+        I_Location[] next = jointMoves.get(random.nextInt(jointMoves.size()));
+        BitSet moved = (BitSet) s.movedUAs.clone();
+        BitSet visited = (BitSet) s.visitedTargets.clone();
+        for (int i = 0; i < next.length; i++) {
+            int ua = context.uaIndexByAgentIndex[i];
+            if (ua >= 0 && !next[i].equals(s.positions[i])) moved.set(ua);
+            if (next[i].getCoordinate().equals(context.agents.get(i).target)) visited.set(i);
+        }
+        return MuaSearchState.full(s.time + 1, next, moved, visited, 0, 0, null, null, 0);
+    }
+
+    private MAPF_Instance heurMax() {
+        return arbitrary("mapfua_heur_max.scene", 5);
+    }
+
+    private MAPF_Instance heurPair() {
+        return arbitrary("mapfua_heur_pair.scene", 4);
+    }
+
+    private MAPF_Instance heurDecoy() {
+        return arbitrary("mapfua_heur_decoy.scene", 6);
+    }
+
     private int reportedCost(String name, Solution solution) {
         if (name.contains("MUA")) return solution.MUA();
         if (name.contains("Fuel")) return solution.FUEL();
@@ -270,20 +484,17 @@ class AStarODMuaSolverTest {
     private List<String> allObjectiveHeuristicSolverNames() {
         return List.of(
                 CanonicalSolversFactory.ASTAR_OD_MUA_ZERO_NAME,
-                CanonicalSolversFactory.ASTAR_OD_MUA_H1_MAX_NAME,
-                CanonicalSolversFactory.ASTAR_OD_MUA_H2_ENHANCED_MAX_NAME,
-                CanonicalSolversFactory.ASTAR_OD_MUA_H3_JOINT_NAME,
-                CanonicalSolversFactory.ASTAR_OD_MUA_H4_RANDOM_PICK_NAME,
+                CanonicalSolversFactory.ASTAR_OD_MUA_MAX_NAME,
+                CanonicalSolversFactory.ASTAR_OD_MUA_IH_NAME,
+                CanonicalSolversFactory.ASTAR_OD_MUA_MH_NAME,
                 CanonicalSolversFactory.ASTAR_OD_FUEL_ZERO_NAME,
-                CanonicalSolversFactory.ASTAR_OD_FUEL_H1_MAX_NAME,
-                CanonicalSolversFactory.ASTAR_OD_FUEL_H2_ENHANCED_MAX_NAME,
-                CanonicalSolversFactory.ASTAR_OD_FUEL_H3_JOINT_NAME,
-                CanonicalSolversFactory.ASTAR_OD_FUEL_H4_RANDOM_PICK_NAME,
+                CanonicalSolversFactory.ASTAR_OD_FUEL_MAX_NAME,
+                CanonicalSolversFactory.ASTAR_OD_FUEL_IH_NAME,
+                CanonicalSolversFactory.ASTAR_OD_FUEL_MH_NAME,
                 CanonicalSolversFactory.ASTAR_OD_SST_ZERO_NAME,
-                CanonicalSolversFactory.ASTAR_OD_SST_H1_MAX_NAME,
-                CanonicalSolversFactory.ASTAR_OD_SST_H2_ENHANCED_MAX_NAME,
-                CanonicalSolversFactory.ASTAR_OD_SST_H3_JOINT_NAME,
-                CanonicalSolversFactory.ASTAR_OD_SST_H4_RANDOM_PICK_NAME);
+                CanonicalSolversFactory.ASTAR_OD_SST_MAX_NAME,
+                CanonicalSolversFactory.ASTAR_OD_SST_IH_NAME,
+                CanonicalSolversFactory.ASTAR_OD_SST_MH_NAME);
     }
 
     private MAPF_Instance sidePocket() {

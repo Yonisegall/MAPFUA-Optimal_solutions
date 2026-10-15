@@ -80,13 +80,45 @@ class CBSStarMUA_SolverTest {
 
     @Test
     void twoVertexSwapTerminatesWithNoSolutionAfterMerge() {
+        // Regression for Timed-Out-vs-genuinely-infeasible reporting: this instance is providably unsolvable
+        // (handleLoopMerge exhausts every merge option), so it must finish almost instantly, well within the
+        // 10s budget - Solved=0 here must NOT also be reported as Timed Out=1.
         MAPF_Instance instance = twoVertexSwapInstance();
         I_Solver solver = CanonicalSolversFactory.createCBSStarMUASolver();
+        InstanceReport report = Metrics.newInstanceReport();
         Solution solution = solver.solve(instance, new RunParametersBuilder()
                 .setTimeout(10_000)
-                .setInstanceReport(Metrics.newInstanceReport())
+                .setInstanceReport(report)
                 .createRP());
         assertNull(solution);
+        assertEquals(0, report.getIntegerValue(InstanceReport.StandardFields.solved));
+        assertEquals(0, report.getIntegerValue(InstanceReport.StandardFields.timedOut),
+                "a genuinely unsolvable instance solved well inside its timeout must not be reported as Timed Out");
+    }
+
+    @Test
+    void reportsTimedOutWhenSharedDeadlineExpiresInsideNestedLowLevelSearch() {
+        // Regression for the CBS*/timeout-reporting gap: runAlgorithm's two "return null" exit points (root
+        // generation failing, and the main loop's open list emptying out because every remaining branch's
+        // low-level replan/merge returned null) do not themselves call checkTimeout() - so if the actual reason
+        // a nested CBSStarJointLowLevel.solve() call returned null was that the *shared* Timeout had expired
+        // (not that the meta-agent was genuinely unsolvable), abortedForTimeout previously stayed false and the
+        // run was misreported as a clean Solved=0 rather than Timed Out=1. cbs_star_double_side_pocket is the
+        // known pathological CBS* merge-storm instance (see CBSStarDoubleSidePocketStressTest / project memory)
+        // that reliably burns through a short deadline via nested low-level calls well before its own open list
+        // would naturally empty out.
+        MAPF_Instance instance = loadArbitrary("cbs_star_double_side_pocket", 6);
+        assertNotNull(instance);
+        I_Solver solver = CanonicalSolversFactory.createCBSStarMUASolver();
+        InstanceReport report = Metrics.newInstanceReport();
+        Solution solution = solver.solve(instance, new RunParametersBuilder()
+                .setTimeout(300)
+                .setInstanceReport(report)
+                .createRP());
+        assertNull(solution, "300ms is not enough for CBS* to solve the double-side-pocket merge storm");
+        assertEquals(0, report.getIntegerValue(InstanceReport.StandardFields.solved));
+        assertEquals(1, report.getIntegerValue(InstanceReport.StandardFields.timedOut),
+                "hitting the shared deadline inside a nested low-level call must still surface as Timed Out=1");
     }
 
     @Test
