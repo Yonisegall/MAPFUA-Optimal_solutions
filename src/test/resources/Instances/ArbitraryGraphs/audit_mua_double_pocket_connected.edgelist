@@ -1,0 +1,10 @@
+undirected
+L C
+C R
+C P
+P Q
+L2 C2
+C2 R2
+C2 P2
+P2 Q2
+R L2

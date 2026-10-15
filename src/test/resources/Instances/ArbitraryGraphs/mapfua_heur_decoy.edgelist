@@ -1,0 +1,9 @@
+undirected
+S1 X
+X T1
+X S2
+X T2
+X PX
+S1 D1
+T2 D2
+S2 D3
