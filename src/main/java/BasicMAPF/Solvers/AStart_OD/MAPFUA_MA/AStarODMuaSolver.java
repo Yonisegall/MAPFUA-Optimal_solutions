@@ -45,6 +45,7 @@ public class AStarODMuaSolver extends A_Solver {
     private long serial;
     private long intermediateNodes;
     private long fullNodes;
+    private long rootH;
 
     public AStarODMuaSolver(MapfuaObjective objective, MuaHeuristicType heuristicType, boolean lazyEvaluation,
                             TransientMAPFSettings transientMAPFSettings) {
@@ -85,17 +86,19 @@ public class AStarODMuaSolver extends A_Solver {
         this.expandedNodes = 0;
         this.intermediateNodes = 0;
         this.fullNodes = 0;
+        this.rootH = 0;
     }
 
     @Override
     protected Solution runAlgorithm(MAPF_Instance instance, RunParameters parameters) {
         MuaSearchState root = root();
-        root = withHeuristic(root, heuristic.estimate(root));
+        rootH = heuristic.estimate(root);
+        root = withHeuristic(root, rootH);
         pushIfBetter(root);
         while (!open.isEmpty()) {
             if (checkTimeout()) return null;
             MuaSearchState current = open.poll();
-            if (!Objects.equals(bestG.get(current.key()), current.g)) continue;
+            if (isStale(current)) continue;
             if (!current.partial && isGoal(current)) return buildSolution(current);
             expandedNodes++;
             if (current.partial) {
@@ -109,7 +112,27 @@ public class AStarODMuaSolver extends A_Solver {
         return null;
     }
 
-    private MuaSearchState root() {
+    /**
+     * Accumulated search cost of a node. A full node's g is its real cost. An OD partial node stores its base
+     * (full) state's g; under MUA the first moves of UAs already chosen in its prefix are irrevocable, so they are
+     * charged here immediately (stepNewUA) instead of only when the joint step completes. This is standard OD cost
+     * decomposition: the completed child's g (base.g + stepNewUA) is unchanged. Fuel and SST keep the stored g.
+     */
+    long effectiveG(MuaSearchState node) {
+        return node.partial && objective == MapfuaObjective.MUA ? node.g + node.stepNewUA : node.g;
+    }
+
+    /** A polled node is stale if a cheaper copy of the same state was pushed after it. */
+    boolean isStale(MuaSearchState node) {
+        return !Objects.equals(bestG.get(node.key()), effectiveG(node));
+    }
+
+    /** Test seam: current OPEN contents (unordered). */
+    List<MuaSearchState> openSnapshot() {
+        return new ArrayList<>(open);
+    }
+
+    MuaSearchState root() {
         int n = context.agents.size();
         I_Location[] positions = new I_Location[n];
         BitSet moved = new BitSet(context.uaStartLocations.length);
@@ -144,13 +167,13 @@ public class AStarODMuaSolver extends A_Solver {
         return true;
     }
 
-    private void expandFull(MuaSearchState node) {
+    void expandFull(MuaSearchState node) {
         int n = context.agents.size();
         expandAgent(node, 0, new I_Location[n], (BitSet) node.movedUAs.clone(),
                 (BitSet) node.visitedTargets.clone(), new Move[n], 0, 0);
     }
 
-    private void expandPartial(MuaSearchState node) {
+    void expandPartial(MuaSearchState node) {
         expandAgent(node.parent, node.nextAgent, node.nextPositions, node.nextMovedUAs,
                 node.nextVisitedTargets, node.chosenMoves, node.stepFuel, node.stepNewUA);
     }
@@ -231,11 +254,12 @@ public class AStarODMuaSolver extends A_Solver {
         return false;
     }
 
-    private void pushIfBetter(MuaSearchState node) {
+    void pushIfBetter(MuaSearchState node) {
         MuaSearchState.MuaStateKey key = node.key();
         Long old = bestG.get(key);
-        if (old == null || node.g < old) {
-            bestG.put(key, node.g);
+        long g = effectiveG(node);
+        if (old == null || g < old) {
+            bestG.put(key, g);
             open.add(node);
             generatedNodes++;
         }
@@ -261,7 +285,7 @@ public class AStarODMuaSolver extends A_Solver {
     }
 
     private final Comparator<MuaSearchState> nodeComparator = (a, b) -> {
-        int byF = Long.compare(a.f(), b.f());
+        int byF = Long.compare(Math.addExact(effectiveG(a), a.h), Math.addExact(effectiveG(b), b.h));
         if (byF != 0) return byF;
         return Long.compare(a.id, b.id);
     };
@@ -280,6 +304,9 @@ public class AStarODMuaSolver extends A_Solver {
         instanceReport.putIntegerValue("MAPFUA_MA_heuristic_evaluations", (int) hm.evaluations);
         instanceReport.putIntegerValue("MAPFUA_MA_heuristic_generated", (int) hm.internalGenerated);
         instanceReport.putIntegerValue("MAPFUA_MA_heuristic_expanded", (int) hm.internalExpanded);
+        instanceReport.putIntegerValue("MAPFUA_MA_heuristic_cache_hits", (int) hm.cacheHits);
+        instanceReport.putIntegerValue("MAPFUA_MA_heuristic_time_ms", (int) (hm.nanos / 1_000_000L));
+        instanceReport.putIntegerValue("MAPFUA_MA_root_h", (int) rootH);
         instanceReport.putIntegerValue("MAPFUA_MA_lazy_full", (int) hm.lazyFullEvaluations);
         instanceReport.putIntegerValue("MAPFUA_MA_lazy_inherited", (int) hm.lazyInheritedEvaluations);
         instanceReport.putIntegerValue("MAPFUA_MA_RDC_builds", (int) context.rdc.builds);

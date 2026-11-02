@@ -6,6 +6,8 @@ final class MuaHeuristicMetrics {
     long internalExpanded;
     long lazyFullEvaluations;
     long lazyInheritedEvaluations;
+    long cacheHits;
+    long nanos;
 
     void addInternalGenerated(long delta) {
         internalGenerated += delta;

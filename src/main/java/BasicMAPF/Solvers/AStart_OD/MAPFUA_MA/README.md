@@ -15,8 +15,17 @@ Objectives:
 
 No objective is used as a tie-breaker for another. OPEN orders by scalar
 `f = g + h` and then deterministic node id. OD partial nodes accumulate one
-joint timestep's movement/history counters, but only completed full joint
-timesteps add to `g`, so SST is not charged twice.
+joint timestep's movement/history counters, and the stored `g` of a partial
+node is its base full state's `g`; completed full joint timesteps add the step
+cost, so SST is not charged twice.
+
+For MUA, the search uses `effectiveG` (OPEN order, `bestG` dominance, stale
+check): a partial node is charged immediately for the UA first moves already
+chosen in its prefix (`g + stepNewUA`). Those charges are irrevocable, and the
+heuristic already treats those UAs as moved, so without this every intra-step
+UA-move combination sat on the parent's f plateau. This is standard OD cost
+decomposition; a completed child's `g` (`base.g + stepNewUA`) is unchanged.
+Fuel and SST use the stored `g`.
 
 `MuaSearchState` stores current positions, OD phase, partial next positions,
 the moved-UA `BitSet`, and the transient `visitedTargets` `BitSet`. The
@@ -68,6 +77,19 @@ Pure SST heuristics:
 builds reverse BFS distances treating unmoved UAs as hard obstacles; unreachable
 queries fall back to the coordinate distance as an admissible lower bound. A
 new key is used whenever a UA first moves and leaves `U_static`.
+
+Value-preserving speed-ups (checked against verbatim reference copies of the original
+h1/h4/h3 code by `MapfuaHeuristicPaperComplianceTest`):
+
+- Every heuristic value is memoized in a bounded LRU cache keyed by exactly what it reads
+  (active AAs, their positions, `movedUAs`). Most queries repeat: OD intermediate nodes that only
+  move UAs leave the AA positions unchanged.
+- MH orders equal-capture nodes by the remaining distance of unserved AAs and stops as soon as a
+  zero-capture step generates a goal. It is still uniform-cost search on captures, so the
+  returned minimum is unchanged.
+
+Extra report fields: `MAPFUA_MA_heuristic_cache_hits`, `MAPFUA_MA_heuristic_time_ms`,
+`MAPFUA_MA_root_h`.
 
 Lazy heuristic evaluation is available through `AStarODMuaBuilder`. It inherits
 the parent value only when `movedUAs`, `visitedTargets`, and all active AA

@@ -475,6 +475,159 @@ class AStarODMuaSolverTest {
         return arbitrary("mapfua_heur_decoy.scene", 6);
     }
 
+    // ---------------------------------------------------------------------------------------------
+    // OD cost decomposition: an OD partial node is charged the UA first-moves already chosen in its prefix
+    // (effectiveG = g + stepNewUA, MUA only); the completed child's g is unchanged.
+    // Grid 3x3, OD agent order: AA0 (0,0)->(2,2), UA1 at (1,1), UA2 at (2,0).
+    // ---------------------------------------------------------------------------------------------
+
+    @Test
+    void odUnmovedUaWaitIsFreeAndFirstMoveIsChargedImmediately() {
+        MAPF_Instance inst = odCostGrid();
+        AStarODMuaSolver s = initSolver(MapfuaObjective.MUA, inst);
+        MuaSearchState root = s.root();
+        s.expandFull(root);
+        MuaSearchState aaWait = findPartial(s, root, 1, loc(inst, 0, 0));
+        assertEquals(0, s.effectiveG(aaWait));
+        s.expandPartial(aaWait);
+        // A: unmoved UA waits -> +0
+        assertEquals(0, s.effectiveG(findPartial(s, root, 2, loc(inst, 0, 0), loc(inst, 1, 1))));
+        // B: unmoved UA's first real move -> +1 at this very partial node (stored g stays the base g)
+        MuaSearchState uaMoved = findPartial(s, root, 2, loc(inst, 0, 0), loc(inst, 1, 2));
+        assertEquals(0, uaMoved.g);
+        assertEquals(1, uaMoved.stepNewUA);
+        assertEquals(1, s.effectiveG(uaMoved));
+    }
+
+    @Test
+    void odSuffixUaIsChargedOnlyOnceSelectedAndTwoUasAddUpAndChildGIsUnchanged() {
+        MAPF_Instance inst = odCostGrid();
+        AStarODMuaSolver s = initSolver(MapfuaObjective.MUA, inst);
+        MuaSearchState root = s.root();
+        s.expandFull(root);
+        s.expandPartial(findPartial(s, root, 1, loc(inst, 0, 0)));
+        MuaSearchState ua1Moved = findPartial(s, root, 2, loc(inst, 0, 0), loc(inst, 1, 2));
+        // F: UA2 has not selected its move yet -> not included
+        assertEquals(1, s.effectiveG(ua1Moved));
+        s.expandPartial(ua1Moved);
+        // F: after UA2 waits -> still +1
+        assertEquals(1, s.effectiveG(findPartial(s, root, 3, loc(inst, 0, 0), loc(inst, 1, 2), loc(inst, 2, 0))));
+        // E: two previously-unmoved UAs moved in the prefix -> base.g + 2
+        MuaSearchState both = findPartial(s, root, 3, loc(inst, 0, 0), loc(inst, 1, 2), loc(inst, 2, 1));
+        assertEquals(2, s.effectiveG(both));
+        // G: completed joint child keeps exactly the previous full-step cost base.g + stepNewUA
+        s.expandPartial(both);
+        MuaSearchState child = findFull(s, root, new I_Location[]{loc(inst, 0, 0), loc(inst, 1, 2), loc(inst, 2, 1)});
+        long previousFullStepCost = root.g + MapfuaObjective.MUA.stepCost(both.stepNewUA, both.stepFuel, 0);
+        assertEquals(previousFullStepCost, child.g);
+        assertEquals(2, child.g);
+        assertEquals(s.effectiveG(both), child.g, "last OD partial and its completed child agree");
+        assertEquals(child.g, s.effectiveG(child), "full nodes use their stored g");
+    }
+
+    @Test
+    void odAlreadyMovedUaIsFreeAndOnlyItsFirstMoveEverCounts() {
+        MAPF_Instance inst = odCostGrid();
+        AStarODMuaSolver s = initSolver(MapfuaObjective.MUA, inst);
+        MuaSearchState root = s.root();
+        // C: UA1 already moved earlier (paid in g = 1) -> moving again adds 0
+        BitSet moved = new BitSet();
+        moved.set(0);
+        MuaSearchState paid = MuaSearchState.full(3, root.positions, moved, root.visitedTargets, 1, 0, null, null, 900);
+        s.expandFull(paid);
+        s.expandPartial(findPartial(s, paid, 1, loc(inst, 0, 0)));
+        assertEquals(1, s.effectiveG(findPartial(s, paid, 2, loc(inst, 0, 0), loc(inst, 1, 2))));
+        // D: UA1 moves away (first move, +1), then moves back home in a later step (+0)
+        s.expandFull(root);
+        s.expandPartial(findPartial(s, root, 1, loc(inst, 0, 0)));
+        MuaSearchState away = findPartial(s, root, 2, loc(inst, 0, 0), loc(inst, 1, 2));
+        s.expandPartial(away);
+        MuaSearchState awayDone = findPartial(s, root, 3, loc(inst, 0, 0), loc(inst, 1, 2), loc(inst, 2, 0));
+        s.expandPartial(awayDone);
+        MuaSearchState step1 = findFull(s, root, new I_Location[]{loc(inst, 0, 0), loc(inst, 1, 2), loc(inst, 2, 0)});
+        assertEquals(1, step1.g);
+        s.expandFull(step1);
+        s.expandPartial(findPartial(s, step1, 1, loc(inst, 0, 0)));
+        MuaSearchState backHome = findPartial(s, step1, 2, loc(inst, 0, 0), loc(inst, 1, 1));
+        assertEquals(0, backHome.stepNewUA);
+        assertEquals(1, s.effectiveG(backHome));
+    }
+
+    @Test
+    void odDuplicatePartialStatesPreferLowerEffectiveCost() {
+        MAPF_Instance inst = odCostGrid();
+        AStarODMuaSolver s = initSolver(MapfuaObjective.MUA, inst);
+        MuaSearchState root = s.root();
+        // Same full state reached at two different costs: the OD partial nodes below them share keys.
+        MuaSearchState expensive = MuaSearchState.full(2, root.positions, root.movedUAs, root.visitedTargets, 3, 0, null, null, 901);
+        MuaSearchState cheap = MuaSearchState.full(2, root.positions, root.movedUAs, root.visitedTargets, 1, 0, null, null, 902);
+        s.expandFull(expensive);
+        s.expandPartial(findPartial(s, expensive, 1, loc(inst, 0, 0)));
+        MuaSearchState expensiveUa = findPartial(s, expensive, 2, loc(inst, 0, 0), loc(inst, 1, 2));
+        assertEquals(4, s.effectiveG(expensiveUa));
+        assertFalse(s.isStale(expensiveUa));
+
+        s.expandFull(cheap);
+        s.expandPartial(findPartial(s, cheap, 1, loc(inst, 0, 0)));
+        MuaSearchState cheapUa = findPartial(s, cheap, 2, loc(inst, 0, 0), loc(inst, 1, 2));
+        assertEquals(expensiveUa.key(), cheapUa.key());
+        assertEquals(2, s.effectiveG(cheapUa));
+        assertFalse(s.isStale(cheapUa), "cheaper duplicate is accepted");
+        assertTrue(s.isStale(expensiveUa), "the dearer copy is skipped when polled");
+
+        int before = s.openSnapshot().size();
+        s.pushIfBetter(expensiveUa);
+        assertEquals(before, s.openSnapshot().size(), "a dearer duplicate is not re-inserted");
+    }
+
+    @Test
+    void odEffectiveCostOnlyAppliesToMua() {
+        MAPF_Instance inst = odCostGrid();
+        for (MapfuaObjective objective : List.of(MapfuaObjective.FUEL, MapfuaObjective.SST)) {
+            AStarODMuaSolver s = initSolver(objective, inst);
+            MuaSearchState root = s.root();
+            s.expandFull(root);
+            s.expandPartial(findPartial(s, root, 1, loc(inst, 0, 0)));
+            MuaSearchState uaMoved = findPartial(s, root, 2, loc(inst, 0, 0), loc(inst, 1, 2));
+            assertEquals(1, uaMoved.stepNewUA);
+            assertEquals(uaMoved.g, s.effectiveG(uaMoved), objective.name());
+        }
+    }
+
+    private MAPF_Instance odCostGrid() {
+        BasicMAPF.Instances.Maps.Enum_MapLocationType[][] grid = new BasicMAPF.Instances.Maps.Enum_MapLocationType[3][3];
+        for (BasicMAPF.Instances.Maps.Enum_MapLocationType[] col : grid) Arrays.fill(col, BasicMAPF.Instances.Maps.Enum_MapLocationType.EMPTY);
+        Agent[] agents = {
+                new Agent(0, new BasicMAPF.Instances.Maps.Coordinates.Coordinate_2D(0, 0), new BasicMAPF.Instances.Maps.Coordinates.Coordinate_2D(2, 2)),
+                new Agent(1, new BasicMAPF.Instances.Maps.Coordinates.Coordinate_2D(1, 1), new BasicMAPF.Instances.Maps.Coordinates.Coordinate_2D(1, 1)),
+                new Agent(2, new BasicMAPF.Instances.Maps.Coordinates.Coordinate_2D(2, 0), new BasicMAPF.Instances.Maps.Coordinates.Coordinate_2D(2, 0)),
+        };
+        return new MAPF_Instance("od_cost_grid", BasicMAPF.Instances.Maps.MapFactory.newSimple4Connected2D_GraphMap(grid), agents);
+    }
+
+    private I_Location loc(MAPF_Instance inst, int x, int y) {
+        return inst.map.getMapLocation(new BasicMAPF.Instances.Maps.Coordinates.Coordinate_2D(x, y));
+    }
+
+    private AStarODMuaSolver initSolver(MapfuaObjective objective, MAPF_Instance inst) {
+        AStarODMuaSolver s = new AStarODMuaBuilder().setObjective(objective).setHeuristicType(MuaHeuristicType.ZERO).createSolver();
+        s.init(inst, new RunParametersBuilder().setTimeout(10_000).setInstanceReport(Metrics.newInstanceReport()).createRP());
+        return s;
+    }
+
+    private MuaSearchState findPartial(AStarODMuaSolver s, MuaSearchState base, int nextAgent, I_Location... prefix) {
+        return s.openSnapshot().stream()
+                .filter(n -> n.partial && n.parent == base && n.nextAgent == nextAgent
+                        && Arrays.equals(Arrays.copyOf(n.nextPositions, nextAgent), prefix))
+                .findFirst().orElseThrow(() -> new AssertionError("no OD partial node " + Arrays.toString(prefix)));
+    }
+
+    private MuaSearchState findFull(AStarODMuaSolver s, MuaSearchState parent, I_Location[] positions) {
+        return s.openSnapshot().stream()
+                .filter(n -> !n.partial && n.parent == parent && Arrays.equals(n.positions, positions))
+                .findFirst().orElseThrow(() -> new AssertionError("no full child " + Arrays.toString(positions)));
+    }
+
     private int reportedCost(String name, Solution solution) {
         if (name.contains("MUA")) return solution.MUA();
         if (name.contains("Fuel")) return solution.FUEL();
