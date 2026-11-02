@@ -976,7 +976,7 @@ def main(argv=None) -> int:
 
     runner_dir = results_root / "runner"
     raw_dir = results_root / "raw"
-    runner_tmp = repo_root / "Experiments" / "MUA" / ".runner_tmp"
+    runner_tmp = repo_root / "Experiments" / "MUA" / ".runner_tmp" / str(os.getpid())
     runs_csv_path = runner_dir / "campaign_runs.csv"
     summary_csv_path = runner_dir / "campaign_summary.csv"
     metadata_path = runner_dir / "campaign_metadata.json"
